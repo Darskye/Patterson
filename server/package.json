@@ -1,0 +1,21 @@
+{
+  "name": "tier2-compliance-dashboard-server",
+  "version": "1.0.0",
+  "description": "Backend server for Tier II Compliance Reporting Dashboard",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "xlsx": "^0.18.5",
+    "multer": "^1.4.5-lts.1",
+    "dotenv": "^16.0.3",
+    "archiver": "^6.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}

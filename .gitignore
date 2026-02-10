@@ -1,0 +1,12 @@
+node_modules/
+package-lock.json
+.env
+uploads/
+*.log
+.DS_Store
+compliance_data.json
+*.xlsx
+.vscode/
+dist/
+build/
+.idea/

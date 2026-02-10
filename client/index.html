@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tier II Compliance Reporting Dashboard</title>
+    
+    <!-- Link to external CSS -->
+    <link rel="stylesheet" href="styles.css">
+    
+    <!-- Chart.js for visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Leaflet for maps -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    
+    <!-- XLSX for Excel parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.min.js"></script>
+    
+    <!-- US JSON for map -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.3.0/topojson.min.js"></script>
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-container">
+                <div class="logo-section">
+                    <div class="logo">
+                        <svg width="50" height="50" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M20 50L50 20L80 50V80C80 85 75 90 70 90H30C25 90 20 85 20 80V50Z" fill="#1A9B8E" stroke="#0F6B63" stroke-width="2"/>
+                            <path d="M35 60L50 45L65 60" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+                        </svg>
+                    </div>
+                    <div class="title-section">
+                        <h1>Tier II Compliance Dashboard</h1>
+                        <p>Environmental Reporting Management System</p>
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button class="btn btn-primary" id="uploadBtn">📤 Upload Excel</button>
+                    <button class="btn btn-secondary" id="exportBtn">📥 Export Excel</button>
+                    <button class="btn btn-secondary" id="downloadAllPlantsBtn">📦 Download All Plants</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Upload Section -->
+            <div class="upload-section" id="uploadSection" style="display: none;">
+                <div class="upload-card">
+                    <h2>Upload Compliance Data</h2>
+                    <div class="upload-area" id="uploadArea">
+                        <p>📁 Drag and drop your Excel file here or click to select</p>
+                        <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+                    </div>
+                    <p class="upload-hint">Supported formats: .xlsx, .xls</p>
+                </div>
+            </div>
+
+            <!-- Dashboard Section -->
+            <div class="dashboard-section" id="dashboardSection" style="display: none;">
+                <!-- Summary Cards -->
+                <div class="summary-cards">
+                    <div class="card stat-card">
+                        <div class="card-icon">🏢</div>
+                        <div class="card-content">
+                            <h3>Total Plants</h3>
+                            <p class="stat-value" id="totalPlants">-</p>
+                        </div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="card-icon">✅</div>
+                        <div class="card-content">
+                            <h3>Completed Reports</h3>
+                            <p class="stat-value" id="completedReports">-</p>
+                            <p class="stat-percent" id="completedPercent">0%</p>
+                        </div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="card-icon">⏳</div>
+                        <div class="card-content">
+                            <h3>In Progress</h3>
+                            <p class="stat-value" id="inProgressReports">-</p>
+                        </div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="card-icon">⚠️</div>
+                        <div class="card-content">
+                            <h3>Overdue/Not Started</h3>
+                            <p class="stat-value" id="overdueReports">-</p>
+                        </div>
+                    </div>
+                    <div class="card stat-card">
+                        <div class="card-icon">🗺️</div>
+                        <div class="card-content">
+                            <h3>States Covered</h3>
+                            <p class="stat-value" id="statesCovered">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts & Visualizations -->
+                <div class="charts-section">
+                    <div class="chart-container">
+                        <h2>Reporting Status Overview</h2>
+                        <canvas id="reportingStatusChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h2>2025 Reporter Distribution</h2>
+                        <canvas id="reporterChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h2>Filing Fee Status</h2>
+                        <canvas id="filingFeeChart"></canvas>
+                    </div>
+                    <div class="chart-container">
+                        <h2>Status by State</h2>
+                        <canvas id="stateChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Map Section -->
+                <div class="map-section">
+                    <h2>Plant Locations Map</h2>
+                    <div id="map" class="map-container"></div>
+                    <div class="map-legend">
+                        <div class="legend-item">
+                            <span class="legend-color" style="background-color: #27ae60;"></span>
+                            <span>Completed</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background-color: #f39c12;"></span>
+                            <span>In Progress</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background-color: #e74c3c;"></span>
+                            <span>Not Started</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-color" style="background-color: #c0392b;"></span>
+                            <span>Overdue</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Plants Table -->
+                <div class="table-section">
+                    <h2>Plant Details</h2>
+                    <div class="table-controls">
+                        <input type="text" id="searchInput" placeholder="🔍 Search plants by name or location..." class="search-input">
+                        <select id="filterStatus" class="filter-select">
+                            <option value="">All Statuses</option>
+                            <option value="Completed">Completed</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Not Started">Not Started</option>
+                            <option value="Overdue">Overdue</option>
+                        </select>
+                    </div>
+                    <div class="table-wrapper">
+                        <table id="plantsTable" class="plants-table">
+                            <thead>
+                                <tr>
+                                    <th>Plant Name</th>
+                                    <th>City, State</th>
+                                    <th>Reporting Status</th>
+                                    <th>Filing Fee</th>
+                                    <th>2025 Reporter</th>
+                                    <th>Client Notes</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state" id="emptyState">
+                <div class="empty-content">
+                    <h2>Welcome to Tier II Compliance Dashboard</h2>
+                    <p>Upload your Excel file to get started with compliance reporting tracking.</p>
+                    <button class="btn btn-primary btn-large" id="uploadBtnEmpty">📤 Upload Your Excel File</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Edit Modal -->
+        <div class="modal" id="editModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Edit Plant Details</h2>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn btn-secondary btn-small" id="downloadAllBtn" title="Download report + all files as ZIP">📦 Download All</button>
+                        <button type="button" class="btn btn-secondary btn-small" id="downloadReportBtn" title="Download plant report">📥 Download Report</button>
+                        <button class="modal-close" id="closeModal">&times;</button>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <form id="editForm">
+                        <div class="form-group">
+                            <label>Plant Name</label>
+                            <input type="text" id="editPlantName" readonly>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Reporting Status</label>
+                                <select id="editReportingStatus">
+                                    <option>Not Started</option>
+                                    <option>Pending</option>
+                                    <option>In Progress</option>
+                                    <option>Completed</option>
+                                    <option>Overdue</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Filing Fee ($)</label>
+                                <input type="number" id="editFilingFee" step="0.01" min="0">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>2025 Reporter?</label>
+                                <select id="editReporter2025">
+                                    <option>Yes</option>
+                                    <option>No</option>
+                                    <option>Pending</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Additional Fee/Unpaid Fee</label>
+                                <select id="editAdditionalFee">
+                                    <option>None</option>
+                                    <option>Pending</option>
+                                    <option>Unpaid</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Additional Steps</label>
+                            <textarea id="editAdditionalSteps"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Notes</label>
+                            <textarea id="editNotes"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Client Notes (For Loren)</label>
+                            <textarea id="editClientNotes" placeholder="Add any issues or problems specific to this site..."></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Attached Files</label>
+                            <div id="filesList" class="files-list"></div>
+                            <div class="file-upload-area">
+                                <input type="file" id="plantFileInput" style="display: none;">
+                                <button type="button" class="btn btn-secondary btn-small" id="uploadFileBtn">📎 Add File</button>
+                            </div>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save Changes</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- File Input Form -->
+        <form id="uploadForm" style="display: none;">
+            <input type="file" id="fileInputForm" accept=".xlsx,.xls">
+        </form>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div class="loading" id="loading">
+        <div class="spinner"></div>
+        <p>Loading...</p>
+    </div>
+
+    <!-- Scripts -->
+    <script src="state-coordinates.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
