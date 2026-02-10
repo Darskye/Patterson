@@ -28,8 +28,11 @@ class ComplianceDashboard {
         // Export button
         document.getElementById('exportBtn').addEventListener('click', () => this.exportToExcel());
 
-        // Download all plants button
-        document.getElementById('downloadAllPlantsBtn').addEventListener('click', () => this.downloadAllPlantPackages());
+        // Download all plants button (optional)
+        const downloadAllPlantsBtn = document.getElementById('downloadAllPlantsBtn');
+        if (downloadAllPlantsBtn) {
+            downloadAllPlantsBtn.addEventListener('click', () => this.downloadAllPlantPackages());
+        }
 
         // Search and filter
         document.getElementById('searchInput')?.addEventListener('input', () => this.filterTable());
