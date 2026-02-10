@@ -507,7 +507,6 @@ class ComplianceDashboard {
                 <td>${plant.client_notes ? '📝 ' + plant.client_notes.substring(0, 25) + '...' : '-'}</td>
                 <td>
                     <button class="edit-btn" onclick="dashboard.openEditModal(${plant.id})" title="Edit plant details">✏️ Edit</button>
-                    <button class="download-btn" onclick="dashboard.downloadPlantReport(${plant.id})" title="Download report">📥</button>
                 </td>
             `;
 
