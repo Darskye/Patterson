@@ -5,10 +5,20 @@ const XLSX = require('xlsx');
 const path = require('path');
 const fs = require('fs');
 const archiver = require('archiver');
+const { Pool } = require('pg');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRESQL_URL;
+const useDatabase = Boolean(connectionString);
+const pool = useDatabase
+  ? new Pool({
+      connectionString,
+      ssl: connectionString.includes('railway') ? { rejectUnauthorized: false } : undefined
+    })
+  : null;
 
 // Middleware
 app.use(cors());
@@ -62,6 +72,215 @@ function saveData(data) {
   cachedData = data;
 }
 
+async function getAllPlants() {
+  if (useDatabase) {
+    const result = await pool.query('SELECT * FROM plants ORDER BY id');
+    return result.rows;
+  }
+  return cachedData || loadData();
+}
+
+async function getPlantById(id) {
+  if (useDatabase) {
+    const result = await pool.query('SELECT * FROM plants WHERE id = $1', [id]);
+    return result.rows[0] || null;
+  }
+  const data = cachedData || loadData();
+  return data ? data.find(p => p.id === id) : null;
+}
+
+async function replaceAllPlants(plants) {
+  if (!useDatabase) {
+    saveData(plants);
+    return;
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('TRUNCATE plant_files RESTART IDENTITY');
+    await client.query('TRUNCATE plants RESTART IDENTITY');
+
+    const insertSql = `
+      INSERT INTO plants (
+        id, plant_name, full_address, address_only, city, state,
+        reporter_2025, reporting_status, filing_fee, additional_fee,
+        additional_steps, notes, client_notes
+      ) VALUES (
+        $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13
+      )
+    `;
+
+    for (const plant of plants) {
+      await client.query(insertSql, [
+        plant.id,
+        plant.plant_name,
+        plant.full_address,
+        plant.address_only,
+        plant.city,
+        plant.state,
+        plant.reporter_2025,
+        plant.reporting_status,
+        plant.filing_fee,
+        plant.additional_fee,
+        plant.additional_steps,
+        plant.notes,
+        plant.client_notes
+      ]);
+    }
+
+    await client.query(
+      "SELECT setval(pg_get_serial_sequence('plants', 'id'), COALESCE((SELECT MAX(id) FROM plants), 1), true)"
+    );
+
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function updatePlantRecord(id, updates) {
+  if (!useDatabase) {
+    const data = cachedData || loadData();
+    if (!data) return null;
+    const plant = data.find(p => p.id === id);
+    if (!plant) return null;
+    Object.assign(plant, updates);
+    saveData(data);
+    return plant;
+  }
+
+  const existing = await getPlantById(id);
+  if (!existing) return null;
+
+  const merged = { ...existing, ...updates };
+  const updateSql = `
+    UPDATE plants SET
+      plant_name = $1,
+      full_address = $2,
+      address_only = $3,
+      city = $4,
+      state = $5,
+      reporter_2025 = $6,
+      reporting_status = $7,
+      filing_fee = $8,
+      additional_fee = $9,
+      additional_steps = $10,
+      notes = $11,
+      client_notes = $12
+    WHERE id = $13
+    RETURNING *
+  `;
+
+  const result = await pool.query(updateSql, [
+    merged.plant_name,
+    merged.full_address,
+    merged.address_only,
+    merged.city,
+    merged.state,
+    merged.reporter_2025,
+    merged.reporting_status,
+    merged.filing_fee,
+    merged.additional_fee,
+    merged.additional_steps,
+    merged.notes,
+    merged.client_notes,
+    id
+  ]);
+
+  return result.rows[0];
+}
+
+async function getPlantFiles(plantId) {
+  if (!useDatabase) {
+    const data = cachedData || loadData();
+    const plant = data ? data.find(p => p.id === plantId) : null;
+    return plant ? plant.files || [] : [];
+  }
+
+  const result = await pool.query(
+    `SELECT id,
+            original_name AS "originalName",
+            stored_name AS "fileName",
+            file_size AS "fileSize",
+            upload_date AS "uploadDate",
+            path
+     FROM plant_files
+     WHERE plant_id = $1
+     ORDER BY upload_date DESC`,
+    [plantId]
+  );
+  return result.rows;
+}
+
+async function addPlantFile(plantId, metadata) {
+  if (!useDatabase) {
+    const data = cachedData || loadData();
+    const plant = data ? data.find(p => p.id === plantId) : null;
+    if (!plant) return null;
+    if (!plant.files) plant.files = [];
+    plant.files.push(metadata);
+    saveData(data);
+    return metadata;
+  }
+
+  const result = await pool.query(
+    `INSERT INTO plant_files (plant_id, original_name, stored_name, file_size, path)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id, original_name AS "originalName", stored_name AS "fileName",
+               file_size AS "fileSize", upload_date AS "uploadDate", path`,
+    [plantId, metadata.originalName, metadata.fileName, metadata.fileSize, metadata.path]
+  );
+  return result.rows[0];
+}
+
+async function getPlantFileById(plantId, fileId) {
+  if (!useDatabase) {
+    const data = cachedData || loadData();
+    const plant = data ? data.find(p => p.id === plantId) : null;
+    return plant ? plant.files.find(f => f.id === fileId) : null;
+  }
+
+  const result = await pool.query(
+    `SELECT id,
+            original_name AS "originalName",
+            stored_name AS "fileName",
+            file_size AS "fileSize",
+            upload_date AS "uploadDate",
+            path
+     FROM plant_files
+     WHERE plant_id = $1 AND id = $2`,
+    [plantId, fileId]
+  );
+  return result.rows[0] || null;
+}
+
+async function deletePlantFile(plantId, fileId) {
+  if (!useDatabase) {
+    const data = cachedData || loadData();
+    const plant = data ? data.find(p => p.id === plantId) : null;
+    if (!plant) return null;
+    const fileIndex = plant.files.findIndex(f => f.id === fileId);
+    if (fileIndex === -1) return null;
+    const file = plant.files[fileIndex];
+    plant.files.splice(fileIndex, 1);
+    saveData(data);
+    return file;
+  }
+
+  const result = await pool.query(
+    `DELETE FROM plant_files
+     WHERE plant_id = $1 AND id = $2
+     RETURNING id, original_name AS "originalName", stored_name AS "fileName",
+               file_size AS "fileSize", upload_date AS "uploadDate", path`,
+    [plantId, fileId]
+  );
+  return result.rows[0] || null;
+}
+
 // Extract first address from potentially multi-address field
 function getFirstAddress(fullAddress) {
   if (!fullAddress) return '';
@@ -72,7 +291,7 @@ function getFirstAddress(fullAddress) {
 // Routes
 
 // Upload and parse Excel file
-app.post('/api/upload', excelUpload.single('file'), (req, res) => {
+app.post('/api/upload', excelUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -104,7 +323,7 @@ app.post('/api/upload', excelUpload.single('file'), (req, res) => {
     }));
 
     // Save data
-    saveData(parsedData);
+    await replaceAllPlants(parsedData);
 
     // Clean up uploaded file
     fs.unlinkSync(req.file.path);
@@ -120,22 +339,27 @@ app.post('/api/upload', excelUpload.single('file'), (req, res) => {
 });
 
 // Get all compliance data
-app.get('/api/data', (req, res) => {
-  const data = cachedData || loadData();
-  if (!data) {
-    return res.status(404).json({ error: 'No data available. Please upload an Excel file first.' });
+app.get('/api/data', async (req, res) => {
+  try {
+    const data = await getAllPlants();
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: 'No data available. Please upload an Excel file first.' });
+    }
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
-  res.json(data);
 });
 
 // Get summary statistics
-app.get('/api/summary', (req, res) => {
-  const data = cachedData || loadData();
-  if (!data) {
-    return res.status(404).json({ error: 'No data available' });
-  }
+app.get('/api/summary', async (req, res) => {
+  try {
+    const data = await getAllPlants();
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: 'No data available' });
+    }
 
-  const summary = {
+    const summary = {
     total_plants: data.length,
     reporting_status: {
       completed: data.filter(p => p.reporting_status === 'Completed' || p.reporting_status === 'Complete').length,
@@ -156,32 +380,29 @@ app.get('/api/summary', (req, res) => {
     states: [...new Set(data.map(p => p.state))].length
   };
 
-  res.json(summary);
+    res.json(summary);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Update a plant record
-app.put('/api/data/:id', (req, res) => {
-  const data = cachedData || loadData();
-  if (!data) {
-    return res.status(404).json({ error: 'No data available' });
-  }
-
-  const plant = data.find(p => p.id === parseInt(req.params.id));
-  if (!plant) {
+app.put('/api/data/:id', async (req, res) => {
+  const plantId = parseInt(req.params.id);
+  const updatedPlant = await updatePlantRecord(plantId, req.body);
+  if (!updatedPlant) {
     return res.status(404).json({ error: 'Plant not found' });
   }
-
-  Object.assign(plant, req.body);
-  saveData(data);
-  res.json(plant);
+  res.json(updatedPlant);
 });
 
 // Export data as Excel
-app.get('/api/export', (req, res) => {
-  const data = cachedData || loadData();
-  if (!data) {
-    return res.status(404).json({ error: 'No data available' });
-  }
+app.get('/api/export', async (req, res) => {
+  try {
+    const data = await getAllPlants();
+    if (!data || data.length === 0) {
+      return res.status(404).json({ error: 'No data available' });
+    }
 
   // Convert data back to sheet format
   const ws = XLSX.utils.json_to_sheet(data.map(p => ({
@@ -218,16 +439,19 @@ app.get('/api/export', (req, res) => {
   const filename = `Tier2_Compliance_Report_${new Date().toISOString().split('T')[0]}.xlsx`;
   XLSX.write(wb, { bookType: 'xlsx', type: 'array', filename });
   
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.send(XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' }));
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(XLSX.write(wb, { bookType: 'xlsx', type: 'buffer' }));
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Export all plants as a ZIP file with individual reports and files
-app.get('/api/export-all-plants', (req, res) => {
+app.get('/api/export-all-plants', async (req, res) => {
   try {
-    const data = cachedData || loadData();
-    if (!data) {
+    const data = await getAllPlants();
+    if (!data || data.length === 0) {
       return res.status(404).json({ error: 'No data available' });
     }
 
@@ -244,7 +468,7 @@ app.get('/api/export-all-plants', (req, res) => {
     archive.pipe(output);
 
     // Add individual plant reports and files
-    data.forEach(plant => {
+    for (const plant of data) {
       // Create individual plant report
       const ws = XLSX.utils.json_to_sheet([{
         'Plant Name': plant.plant_name,
@@ -267,15 +491,16 @@ app.get('/api/export-all-plants', (req, res) => {
       archive.file(reportPath, { name: `reports/${plant.plant_name}_Report.xlsx` });
 
       // Add plant files
-      const plantFileDir = path.join(__dirname, '../uploads', `plant_${plant.id}`);
-      if (fs.existsSync(plantFileDir)) {
-        const files = fs.readdirSync(plantFileDir);
-        files.forEach(file => {
-          const filePath = path.join(plantFileDir, file);
-          archive.file(filePath, { name: `files/${plant.plant_name}/${file}` });
+      const plantFiles = await getPlantFiles(plant.id);
+      if (plantFiles.length > 0) {
+        plantFiles.forEach(file => {
+          const filePath = path.join(__dirname, '..', file.path);
+          if (fs.existsSync(filePath)) {
+            archive.file(filePath, { name: `files/${plant.plant_name}/${file.fileName}` });
+          }
         });
       }
-    });
+    }
 
     output.on('close', () => {
       res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
@@ -300,16 +525,10 @@ app.get('/api/export-all-plants', (req, res) => {
 });
 
 // Upload file to specific plant
-app.post('/api/plant/:id/files', plantFileUpload.single('file'), (req, res) => {
+app.post('/api/plant/:id/files', plantFileUpload.single('file'), async (req, res) => {
   try {
     const plantId = parseInt(req.params.id);
-    const data = cachedData || loadData();
-    
-    if (!data) {
-      return res.status(404).json({ error: 'No data available' });
-    }
-
-    const plant = data.find(p => p.id === plantId);
+    const plant = await getPlantById(plantId);
     if (!plant) {
       return res.status(404).json({ error: 'Plant not found' });
     }
@@ -335,27 +554,18 @@ app.post('/api/plant/:id/files', plantFileUpload.single('file'), (req, res) => {
 
     // Create file metadata
     const fileMetadata = {
-      id: Date.now(),
       originalName: req.file.originalname,
       fileName: uniqueName,
       fileSize: req.file.size,
-      uploadDate: new Date().toISOString(),
       path: `uploads/plant_${plantId}/${uniqueName}`
     };
 
-    // Add to plant's files array
-    if (!plant.files) {
-      plant.files = [];
-    }
-    plant.files.push(fileMetadata);
-
-    // Save updated data
-    saveData(data);
+    const savedFile = await addPlantFile(plantId, fileMetadata);
 
     res.json({
       success: true,
       message: 'File uploaded successfully',
-      file: fileMetadata
+      file: savedFile
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -363,58 +573,36 @@ app.post('/api/plant/:id/files', plantFileUpload.single('file'), (req, res) => {
 });
 
 // Get plant files
-app.get('/api/plant/:id/files', (req, res) => {
+app.get('/api/plant/:id/files', async (req, res) => {
   try {
     const plantId = parseInt(req.params.id);
-    const data = cachedData || loadData();
-    
-    if (!data) {
-      return res.status(404).json({ error: 'No data available' });
-    }
-
-    const plant = data.find(p => p.id === plantId);
+    const plant = await getPlantById(plantId);
     if (!plant) {
       return res.status(404).json({ error: 'Plant not found' });
     }
 
-    res.json(plant.files || []);
+    const files = await getPlantFiles(plantId);
+    res.json(files);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
 // Delete plant file
-app.delete('/api/plant/:id/files/:fileId', (req, res) => {
+app.delete('/api/plant/:id/files/:fileId', async (req, res) => {
   try {
     const plantId = parseInt(req.params.id);
     const fileId = parseInt(req.params.fileId);
-    const data = cachedData || loadData();
-    
-    if (!data) {
-      return res.status(404).json({ error: 'No data available' });
-    }
 
-    const plant = data.find(p => p.id === plantId);
-    if (!plant) {
-      return res.status(404).json({ error: 'Plant not found' });
-    }
-
-    const fileIndex = plant.files.findIndex(f => f.id === fileId);
-    if (fileIndex === -1) {
+    const file = await deletePlantFile(plantId, fileId);
+    if (!file) {
       return res.status(404).json({ error: 'File not found' });
     }
 
-    const file = plant.files[fileIndex];
-    
-    // Delete from filesystem
     const filePath = path.join(__dirname, '..', file.path);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
-
-    // Remove from data
-    plant.files.splice(fileIndex, 1);
-    saveData(data);
 
     res.json({ success: true, message: 'File deleted successfully' });
   } catch (error) {
@@ -423,28 +611,17 @@ app.delete('/api/plant/:id/files/:fileId', (req, res) => {
 });
 
 // Download plant file
-app.get('/api/plant/:id/files/:fileId/download', (req, res) => {
+app.get('/api/plant/:id/files/:fileId/download', async (req, res) => {
   try {
     const plantId = parseInt(req.params.id);
     const fileId = parseInt(req.params.fileId);
-    const data = cachedData || loadData();
-    
-    if (!data) {
-      return res.status(404).json({ error: 'No data available' });
-    }
 
-    const plant = data.find(p => p.id === plantId);
-    if (!plant) {
-      return res.status(404).json({ error: 'Plant not found' });
-    }
-
-    const file = plant.files.find(f => f.id === fileId);
+    const file = await getPlantFileById(plantId, fileId);
     if (!file) {
       return res.status(404).json({ error: 'File not found' });
     }
 
     const filePath = path.join(__dirname, '..', file.path);
-    
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'File not found on disk' });
     }
@@ -456,19 +633,15 @@ app.get('/api/plant/:id/files/:fileId/download', (req, res) => {
 });
 
 // Generate and download plant report
-app.get('/api/plant/:id/report', (req, res) => {
+app.get('/api/plant/:id/report', async (req, res) => {
   try {
     const plantId = parseInt(req.params.id);
-    const data = cachedData || loadData();
-    
-    if (!data) {
-      return res.status(404).json({ error: 'No data available' });
-    }
-
-    const plant = data.find(p => p.id === plantId);
+    const plant = await getPlantById(plantId);
     if (!plant) {
       return res.status(404).json({ error: 'Plant not found' });
     }
+
+    const plantFiles = await getPlantFiles(plantId);
 
     // Create report data
     const reportData = [{
@@ -530,11 +703,11 @@ app.get('/api/plant/:id/report', (req, res) => {
       'Value': ''
     });
 
-    if (plant.files && plant.files.length > 0) {
+    if (plantFiles.length > 0) {
       reportData.push({ 'Plant Information': '', 'Value': '' }); // Spacer
       reportData.push({ 'Plant Information': 'Attached Files', 'Value': '' });
       
-      plant.files.forEach(file => {
+      plantFiles.forEach(file => {
         reportData.push({
           'File': file.originalName,
           'Size': (file.fileSize / 1024).toFixed(1) + ' KB'
@@ -570,19 +743,15 @@ app.get('/api/plant/:id/report', (req, res) => {
 });
 
 // Download plant report + all attached files as ZIP
-app.get('/api/plant/:id/download-all', (req, res) => {
+app.get('/api/plant/:id/download-all', async (req, res) => {
   try {
     const plantId = parseInt(req.params.id);
-    const data = cachedData || loadData();
-    
-    if (!data) {
-      return res.status(404).json({ error: 'No data available' });
-    }
-
-    const plant = data.find(p => p.id === plantId);
+    const plant = await getPlantById(plantId);
     if (!plant) {
       return res.status(404).json({ error: 'Plant not found' });
     }
+
+    const plantFiles = await getPlantFiles(plantId);
 
     // Create archive
     const archive = archiver('zip', { zlib: { level: 9 } });
@@ -653,11 +822,11 @@ app.get('/api/plant/:id/download-all', (req, res) => {
       'Value': ''
     });
 
-    if (plant.files && plant.files.length > 0) {
+    if (plantFiles.length > 0) {
       reportData.push({ 'Plant Information': '', 'Value': '' }); // Spacer
       reportData.push({ 'Plant Information': 'Attached Files', 'Value': '' });
       
-      plant.files.forEach(file => {
+      plantFiles.forEach(file => {
         reportData.push({
           'File': file.originalName,
           'Size': (file.fileSize / 1024).toFixed(1) + ' KB'
@@ -681,11 +850,9 @@ app.get('/api/plant/:id/download-all', (req, res) => {
     archive.append(reportBuffer, { name: `${plant.plant_name}_Report.xlsx` });
 
     // Add all plant files to ZIP
-    if (plant.files && plant.files.length > 0) {
-      const filesDir = path.join(__dirname, '..', 'uploads', `plant_${plantId}`);
-      
-      plant.files.forEach(file => {
-        const filePath = path.join(filesDir, file.fileName);
+    if (plantFiles.length > 0) {
+      plantFiles.forEach(file => {
+        const filePath = path.join(__dirname, '..', file.path);
         if (fs.existsSync(filePath)) {
           archive.file(filePath, { name: `Files/${file.originalName}` });
         }
