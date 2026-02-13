@@ -41,6 +41,9 @@
                 <div class="header-actions">
                     <button class="btn btn-primary" id="uploadBtn">📤 Upload Excel</button>
                     <button class="btn btn-secondary" id="exportBtn">📥 Export Excel</button>
+                    <button class="btn btn-secondary" id="alertsBtn">⚠️ Alerts</button>
+                    <button class="btn btn-secondary" id="messagesBtn">💬 Messages</button>
+                    <div class="user-badge" id="currentUserBadge">User: -</div>
                 </div>
             </div>
         </header>
@@ -178,6 +181,38 @@
                 </div>
             </div>
 
+            <!-- Alerts Section -->
+            <div class="alerts-section" id="alertsSection" style="display: none;">
+                <div class="section-header">
+                    <h2>All Alerts</h2>
+                    <button class="btn btn-secondary" id="backToDashboardBtn">⬅ Back to Dashboard</button>
+                </div>
+                <div class="alerts-card">
+                    <h3>Add General Alert</h3>
+                    <div class="alerts-input">
+                        <input type="text" id="generalAlertInput" placeholder="Type a general alert...">
+                        <button class="btn btn-primary" id="addGeneralAlertBtn">Add Alert</button>
+                    </div>
+                </div>
+                <div class="alerts-list" id="alertsList"></div>
+            </div>
+
+            <!-- Messages Section -->
+            <div class="messages-section" id="messagesSection" style="display: none;">
+                <div class="section-header">
+                    <h2>Messages</h2>
+                    <button class="btn btn-secondary" id="backToDashboardBtnMsg">⬅ Back to Dashboard</button>
+                </div>
+                <div class="chat-panel">
+                    <div class="chat-header">Darian ↔ Loren</div>
+                    <div class="chat-messages" id="chatMessages"></div>
+                    <div class="chat-input">
+                        <input type="text" id="chatMessageInput" placeholder="Type a message...">
+                        <button class="btn btn-primary" id="sendMessageBtn">Send</button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Empty State -->
             <div class="empty-state" id="emptyState">
                 <div class="empty-content">
@@ -272,6 +307,22 @@
         <form id="uploadForm" style="display: none;">
             <input type="file" id="fileInputForm" accept=".xlsx,.xls">
         </form>
+    </div>
+
+    <!-- User Selector Modal -->
+    <div class="modal user-modal" id="userModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Select User</h2>
+            </div>
+            <div class="modal-body">
+                <div class="user-options">
+                    <button class="btn btn-primary user-select" data-user="Darian">Darian</button>
+                    <button class="btn btn-primary user-select" data-user="Loren">Loren</button>
+                    <button class="btn btn-primary user-select" data-user="Ben">Ben</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Loading Spinner -->

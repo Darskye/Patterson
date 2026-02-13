@@ -6,6 +6,7 @@ class ComplianceDashboard {
         this.map = null;
         this.charts = {};
         this.currentEditingId = null;
+        this.currentUser = localStorage.getItem('currentUser');
         
         // API base URL - configure for deployed environment
         this.apiBaseUrl = window.location.hostname === 'localhost' 
@@ -13,6 +14,7 @@ class ComplianceDashboard {
             : localStorage.getItem('apiBaseUrl') || 'https://patterson-production.up.railway.app';
 
         this.initializeEventListeners();
+        this.initializeUser();
         this.loadData();
     }
 
@@ -34,6 +36,25 @@ class ComplianceDashboard {
             downloadAllPlantsBtn.addEventListener('click', () => this.downloadAllPlantPackages());
         }
 
+        // Alerts and messages
+        document.getElementById('alertsBtn')?.addEventListener('click', () => this.showAlerts());
+        document.getElementById('messagesBtn')?.addEventListener('click', () => this.showMessages());
+        document.getElementById('backToDashboardBtn')?.addEventListener('click', () => this.showDashboard());
+        document.getElementById('backToDashboardBtnMsg')?.addEventListener('click', () => this.showDashboard());
+        document.getElementById('addGeneralAlertBtn')?.addEventListener('click', () => this.addGeneralAlert());
+        document.getElementById('sendMessageBtn')?.addEventListener('click', () => this.sendMessage());
+        document.getElementById('chatMessageInput')?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.sendMessage();
+            }
+        });
+
+        // User select
+        document.querySelectorAll('.user-select').forEach(button => {
+            button.addEventListener('click', () => this.setCurrentUser(button.dataset.user));
+        });
+
         // Search and filter
         document.getElementById('searchInput')?.addEventListener('input', () => this.filterTable());
         document.getElementById('filterStatus')?.addEventListener('change', () => this.filterTable());
@@ -51,6 +72,40 @@ class ComplianceDashboard {
         document.getElementById('editModal').addEventListener('click', (e) => {
             if (e.target.id === 'editModal') this.closeModal();
         });
+    }
+
+    initializeUser() {
+        if (!this.currentUser) {
+            document.getElementById('userModal').classList.add('active');
+            return;
+        }
+        this.updateUserUI();
+    }
+
+    setCurrentUser(user) {
+        this.currentUser = user;
+        localStorage.setItem('currentUser', user);
+        document.getElementById('userModal').classList.remove('active');
+        this.updateUserUI();
+    }
+
+    updateUserUI() {
+        const badge = document.getElementById('currentUserBadge');
+        if (badge) {
+            badge.textContent = `User: ${this.currentUser}`;
+        }
+
+        const messagesBtn = document.getElementById('messagesBtn');
+        if (messagesBtn) {
+            messagesBtn.style.display = this.currentUser === 'Ben' ? 'none' : 'inline-flex';
+        }
+
+        if (this.currentUser === 'Ben') {
+            const messagesSection = document.getElementById('messagesSection');
+            if (messagesSection) {
+                messagesSection.style.display = 'none';
+            }
+        }
     }
 
     async loadData() {
@@ -176,12 +231,31 @@ class ComplianceDashboard {
         document.getElementById('emptyState').style.display = 'none';
         document.getElementById('uploadSection').style.display = 'none';
         document.getElementById('dashboardSection').style.display = 'block';
+        document.getElementById('alertsSection').style.display = 'none';
+        document.getElementById('messagesSection').style.display = 'none';
     }
 
     showUploadSection() {
         document.getElementById('emptyState').style.display = 'flex';
         document.getElementById('uploadSection').style.display = 'none';
         document.getElementById('dashboardSection').style.display = 'none';
+        document.getElementById('alertsSection').style.display = 'none';
+        document.getElementById('messagesSection').style.display = 'none';
+    }
+
+    showAlerts() {
+        document.getElementById('dashboardSection').style.display = 'none';
+        document.getElementById('alertsSection').style.display = 'block';
+        document.getElementById('messagesSection').style.display = 'none';
+        this.loadAlerts();
+    }
+
+    showMessages() {
+        if (this.currentUser === 'Ben') return;
+        document.getElementById('dashboardSection').style.display = 'none';
+        document.getElementById('alertsSection').style.display = 'none';
+        document.getElementById('messagesSection').style.display = 'block';
+        this.loadMessages();
     }
 
     async renderDashboard() {
@@ -501,8 +575,10 @@ class ComplianceDashboard {
             const row = document.createElement('tr');
             const statusClass = this.getStatusClass(plant.reporting_status);
 
+            const hasAlert = plant.notes && plant.notes.trim().length > 0;
+
             row.innerHTML = `
-                <td><strong>${plant.plant_name}</strong></td>
+                <td><strong>${plant.plant_name}</strong>${hasAlert ? ' <span class="alert-icon" title="Alert: notes present">⚠️</span>' : ''}</td>
                 <td>${plant.city}, ${plant.state}</td>
                 <td><span class="status-badge ${statusClass}">${plant.reporting_status || 'Not Started'}</span></td>
                 <td>${plant.filing_fee > 0 ? '$' + plant.filing_fee.toFixed(2) : 'Not Paid'}</td>
@@ -515,6 +591,131 @@ class ComplianceDashboard {
 
             tbody.appendChild(row);
         });
+    }
+
+    async loadAlerts() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/api/alerts`);
+            if (!response.ok) {
+                throw new Error('Failed to load alerts');
+            }
+            const alerts = await response.json();
+            this.renderAlerts(alerts);
+        } catch (error) {
+            console.error('Error loading alerts:', error);
+        }
+    }
+
+    renderAlerts(alerts) {
+        const alertsList = document.getElementById('alertsList');
+        if (!alertsList) return;
+
+        if (!alerts || alerts.length === 0) {
+            alertsList.innerHTML = '<div class="alert-item"><div>No alerts found.</div></div>';
+            return;
+        }
+
+        alertsList.innerHTML = alerts.map(alert => {
+            const meta = alert.type === 'general'
+                ? `General • ${alert.createdBy || 'System'}`
+                : `Plant • ${alert.plantName}`;
+            return `
+                <div class="alert-item">
+                    <div>
+                        <div>${alert.message}</div>
+                        <div class="alert-meta">${meta}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    async addGeneralAlert() {
+        const input = document.getElementById('generalAlertInput');
+        if (!input || !input.value.trim()) return;
+
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/api/alerts/general`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: input.value.trim(),
+                    createdBy: this.currentUser || 'System'
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to add alert');
+            }
+
+            input.value = '';
+            this.loadAlerts();
+        } catch (error) {
+            console.error('Error adding alert:', error);
+        }
+    }
+
+    async loadMessages() {
+        if (!this.currentUser || this.currentUser === 'Ben') return;
+
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/api/messages?user=${encodeURIComponent(this.currentUser)}`);
+            if (!response.ok) {
+                throw new Error('Failed to load messages');
+            }
+            const messages = await response.json();
+            this.renderMessages(messages);
+        } catch (error) {
+            console.error('Error loading messages:', error);
+        }
+    }
+
+    renderMessages(messages) {
+        const chatMessages = document.getElementById('chatMessages');
+        if (!chatMessages) return;
+
+        if (!messages || messages.length === 0) {
+            chatMessages.innerHTML = '<div class="alert-meta">No messages yet.</div>';
+            return;
+        }
+
+        chatMessages.innerHTML = messages.map(message => {
+            const isSelf = message.sender.toLowerCase() === this.currentUser.toLowerCase();
+            return `
+                <div class="chat-message ${isSelf ? 'self' : 'other'}">
+                    <div>${message.body}</div>
+                </div>
+            `;
+        }).join('');
+
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+    async sendMessage() {
+        if (!this.currentUser || this.currentUser === 'Ben') return;
+
+        const input = document.getElementById('chatMessageInput');
+        if (!input || !input.value.trim()) return;
+
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/api/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sender: this.currentUser,
+                    body: input.value.trim()
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to send message');
+            }
+
+            input.value = '';
+            this.loadMessages();
+        } catch (error) {
+            console.error('Error sending message:', error);
+        }
     }
 
     getStatusClass(status) {

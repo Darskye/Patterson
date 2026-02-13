@@ -11,7 +11,7 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-const connectionString = process.env.DATABASE_URL || process.env.POSTGRESQL_URL;
+const connectionString = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL || process.env.POSTGRESQL_URL;
 const useDatabase = Boolean(connectionString);
 const pool = useDatabase
   ? new Pool({
@@ -55,6 +55,8 @@ if (!fs.existsSync('uploads')) {
 
 let cachedData = null;
 const DATA_FILE = 'compliance_data.json';
+let cachedGeneralAlerts = [];
+let cachedMessages = [];
 
 // Load data from file on startup
 function loadData() {
@@ -70,6 +72,59 @@ function loadData() {
 function saveData(data) {
   fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
   cachedData = data;
+}
+
+async function initializeDatabase() {
+  if (!useDatabase) return;
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS plants (
+      id INTEGER PRIMARY KEY,
+      plant_name VARCHAR(100),
+      full_address VARCHAR(255),
+      address_only VARCHAR(255),
+      city VARCHAR(100),
+      state VARCHAR(10),
+      reporter_2025 VARCHAR(20),
+      reporting_status VARCHAR(30),
+      filing_fee NUMERIC,
+      additional_fee VARCHAR(100),
+      additional_steps VARCHAR(255),
+      notes TEXT,
+      client_notes TEXT
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS plant_files (
+      id SERIAL PRIMARY KEY,
+      plant_id INTEGER REFERENCES plants(id) ON DELETE CASCADE,
+      original_name VARCHAR(255),
+      stored_name VARCHAR(255),
+      file_size BIGINT,
+      upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      path VARCHAR(255)
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS general_alerts (
+      id SERIAL PRIMARY KEY,
+      message TEXT NOT NULL,
+      created_by VARCHAR(50),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id SERIAL PRIMARY KEY,
+      sender VARCHAR(50) NOT NULL,
+      receiver VARCHAR(50) NOT NULL,
+      body TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
 }
 
 async function getAllPlants() {
@@ -381,6 +436,139 @@ app.get('/api/summary', async (req, res) => {
   };
 
     res.json(summary);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all alerts (plant notes + general alerts)
+app.get('/api/alerts', async (req, res) => {
+  try {
+    const data = await getAllPlants();
+    const plantAlerts = (data || [])
+      .filter(plant => plant.notes && plant.notes.trim().length > 0)
+      .map(plant => ({
+        type: 'plant',
+        plantId: plant.id,
+        plantName: plant.plant_name,
+        message: plant.notes.trim()
+      }));
+
+    let generalAlerts = [];
+    if (useDatabase) {
+      const result = await pool.query(
+        `SELECT id, message, created_by AS "createdBy", created_at AS "createdAt"
+         FROM general_alerts
+         ORDER BY created_at DESC`
+      );
+      generalAlerts = result.rows.map(alert => ({
+        ...alert,
+        type: 'general'
+      }));
+    } else {
+      generalAlerts = cachedGeneralAlerts.map(alert => ({ ...alert, type: 'general' }));
+    }
+
+    res.json([...generalAlerts, ...plantAlerts]);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add a general alert
+app.post('/api/alerts/general', async (req, res) => {
+  try {
+    const message = String(req.body.message || '').trim();
+    const createdBy = String(req.body.createdBy || '').trim() || 'System';
+
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    if (useDatabase) {
+      const result = await pool.query(
+        `INSERT INTO general_alerts (message, created_by)
+         VALUES ($1, $2)
+         RETURNING id, message, created_by AS "createdBy", created_at AS "createdAt"`,
+        [message, createdBy]
+      );
+      return res.json({ ...result.rows[0], type: 'general' });
+    }
+
+    const alert = {
+      id: Date.now(),
+      message,
+      createdBy,
+      createdAt: new Date().toISOString(),
+      type: 'general'
+    };
+    cachedGeneralAlerts.unshift(alert);
+    res.json(alert);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get messages between Darian and Loren
+app.get('/api/messages', async (req, res) => {
+  try {
+    const user = String(req.query.user || '').toLowerCase();
+    if (!['darian', 'loren'].includes(user)) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    if (useDatabase) {
+      const result = await pool.query(
+        `SELECT id, sender, receiver, body, created_at AS "createdAt"
+         FROM messages
+         WHERE (sender = 'Darian' AND receiver = 'Loren')
+            OR (sender = 'Loren' AND receiver = 'Darian')
+         ORDER BY created_at ASC`
+      );
+      return res.json(result.rows);
+    }
+
+    res.json(cachedMessages);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Send message (only Darian or Loren)
+app.post('/api/messages', async (req, res) => {
+  try {
+    const sender = String(req.body.sender || '').trim();
+    const body = String(req.body.body || '').trim();
+    const senderLower = sender.toLowerCase();
+
+    if (!['darian', 'loren'].includes(senderLower)) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+    if (!body) {
+      return res.status(400).json({ error: 'Message is required' });
+    }
+
+    const receiver = senderLower === 'darian' ? 'Loren' : 'Darian';
+
+    if (useDatabase) {
+      const result = await pool.query(
+        `INSERT INTO messages (sender, receiver, body)
+         VALUES ($1, $2, $3)
+         RETURNING id, sender, receiver, body, created_at AS "createdAt"`,
+        [sender, receiver, body]
+      );
+      return res.json(result.rows[0]);
+    }
+
+    const message = {
+      id: Date.now(),
+      sender,
+      receiver,
+      body,
+      createdAt: new Date().toISOString()
+    };
+    cachedMessages.push(message);
+    res.json(message);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -877,5 +1065,8 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Tier II Compliance Dashboard Server running on http://localhost:${PORT}`);
+  initializeDatabase().catch(error => {
+    console.error('Database initialization failed:', error);
+  });
   loadData();
 });
