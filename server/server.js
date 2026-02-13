@@ -57,6 +57,8 @@ let cachedData = null;
 const DATA_FILE = 'compliance_data.json';
 let cachedGeneralAlerts = [];
 let cachedMessages = [];
+let cachedAlertResponses = [];
+let cachedAlertResolutions = [];
 
 // Load data from file on startup
 function loadData() {
@@ -123,6 +125,28 @@ async function initializeDatabase() {
       receiver VARCHAR(50) NOT NULL,
       body TEXT NOT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS alert_responses (
+      id SERIAL PRIMARY KEY,
+      alert_type VARCHAR(20) NOT NULL,
+      alert_id INTEGER NOT NULL,
+      responder VARCHAR(50) NOT NULL,
+      message TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS alert_resolutions (
+      alert_type VARCHAR(20) NOT NULL,
+      alert_id INTEGER NOT NULL,
+      resolved BOOLEAN DEFAULT false,
+      resolved_by VARCHAR(50),
+      resolved_at TIMESTAMP,
+      PRIMARY KEY (alert_type, alert_id)
     );
   `);
 }
@@ -448,6 +472,7 @@ app.get('/api/alerts', async (req, res) => {
     const plantAlerts = (data || [])
       .filter(plant => plant.notes && plant.notes.trim().length > 0)
       .map(plant => ({
+        id: plant.id,
         type: 'plant',
         plantId: plant.id,
         plantName: plant.plant_name,
@@ -469,7 +494,63 @@ app.get('/api/alerts', async (req, res) => {
       generalAlerts = cachedGeneralAlerts.map(alert => ({ ...alert, type: 'general' }));
     }
 
-    res.json([...generalAlerts, ...plantAlerts]);
+    const allAlerts = [...generalAlerts, ...plantAlerts];
+    if (allAlerts.length === 0) {
+      return res.json([]);
+    }
+
+    let responses = [];
+    let resolutions = [];
+    if (useDatabase) {
+      const responseResult = await pool.query(
+        `SELECT alert_type AS "alertType",
+                alert_id AS "alertId",
+                responder,
+                message,
+                created_at AS "createdAt"
+         FROM alert_responses`
+      );
+      responses = responseResult.rows;
+
+      const resolutionResult = await pool.query(
+        `SELECT alert_type AS "alertType",
+                alert_id AS "alertId",
+                resolved,
+                resolved_by AS "resolvedBy",
+                resolved_at AS "resolvedAt"
+         FROM alert_resolutions`
+      );
+      resolutions = resolutionResult.rows;
+    } else {
+      responses = cachedAlertResponses;
+      resolutions = cachedAlertResolutions;
+    }
+
+    const responseMap = responses.reduce((acc, response) => {
+      const key = `${String(response.alertType).toLowerCase()}:${response.alertId}`;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(response);
+      return acc;
+    }, {});
+
+    const resolutionMap = resolutions.reduce((acc, resolution) => {
+      acc[`${String(resolution.alertType).toLowerCase()}:${resolution.alertId}`] = resolution;
+      return acc;
+    }, {});
+
+    const enriched = allAlerts.map(alert => {
+      const key = `${String(alert.type).toLowerCase()}:${alert.id}`;
+      const resolution = resolutionMap[key];
+      return {
+        ...alert,
+        resolved: resolution ? Boolean(resolution.resolved) : false,
+        resolvedBy: resolution ? resolution.resolvedBy : null,
+        resolvedAt: resolution ? resolution.resolvedAt : null,
+        responses: responseMap[key] || []
+      };
+    });
+
+    res.json(enriched);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -504,6 +585,100 @@ app.post('/api/alerts/general', async (req, res) => {
     };
     cachedGeneralAlerts.unshift(alert);
     res.json(alert);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/alerts/:type/:id/respond', async (req, res) => {
+  try {
+    const alertType = String(req.params.type || '').toLowerCase();
+    const alertId = parseInt(req.params.id);
+    const responder = String(req.body.responder || 'System').trim();
+    const message = String(req.body.message || '').trim();
+
+    if (!['general', 'plant'].includes(alertType)) {
+      return res.status(400).json({ error: 'Invalid alert type' });
+    }
+    if (!alertId || !message) {
+      return res.status(400).json({ error: 'Alert ID and message are required' });
+    }
+
+    if (useDatabase) {
+      const result = await pool.query(
+        `INSERT INTO alert_responses (alert_type, alert_id, responder, message)
+         VALUES ($1, $2, $3, $4)
+         RETURNING id, alert_type AS "alertType", alert_id AS "alertId", responder,
+                   message, created_at AS "createdAt"`,
+        [alertType, alertId, responder, message]
+      );
+      return res.json(result.rows[0]);
+    }
+
+    const response = {
+      id: Date.now(),
+      alertType,
+      alertId,
+      responder,
+      message,
+      createdAt: new Date().toISOString()
+    };
+    cachedAlertResponses.push(response);
+    res.json(response);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/alerts/:type/:id/resolve', async (req, res) => {
+  try {
+    const alertType = String(req.params.type || '').toLowerCase();
+    const alertId = parseInt(req.params.id);
+    const resolved = Boolean(req.body.resolved);
+    const resolvedBy = String(req.body.resolvedBy || 'System').trim();
+
+    if (!['general', 'plant'].includes(alertType)) {
+      return res.status(400).json({ error: 'Invalid alert type' });
+    }
+    if (!alertId) {
+      return res.status(400).json({ error: 'Alert ID is required' });
+    }
+
+    if (resolvedBy.toLowerCase() !== 'darian') {
+      return res.status(403).json({ error: 'Only Darian can resolve alerts' });
+    }
+
+    const resolvedAt = resolved ? new Date() : null;
+
+    if (useDatabase) {
+      await pool.query(
+        `INSERT INTO alert_resolutions (alert_type, alert_id, resolved, resolved_by, resolved_at)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (alert_type, alert_id)
+         DO UPDATE SET resolved = EXCLUDED.resolved,
+                       resolved_by = EXCLUDED.resolved_by,
+                       resolved_at = EXCLUDED.resolved_at`,
+        [alertType, alertId, resolved, resolvedBy, resolvedAt]
+      );
+      return res.json({ success: true });
+    }
+
+    const existingIndex = cachedAlertResolutions.findIndex(
+      resolution => resolution.alertType === alertType && resolution.alertId === alertId
+    );
+    const resolution = {
+      alertType,
+      alertId,
+      resolved,
+      resolvedBy,
+      resolvedAt: resolvedAt ? resolvedAt.toISOString() : null
+    };
+    if (existingIndex >= 0) {
+      cachedAlertResolutions[existingIndex] = resolution;
+    } else {
+      cachedAlertResolutions.push(resolution);
+    }
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

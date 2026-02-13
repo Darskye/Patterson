@@ -649,14 +649,12 @@ class ComplianceDashboard {
                     <div>
                         <div class="alert-message">${alert.message}</div>
                         <div class="alert-meta">${meta} • ${resolvedLabel}</div>
-                        ${responses.length ? `
-                            <div class="alert-responses">
-                                ${responses.map(response => {
-                                    const icon = this.getResponderIcon(response.responder);
-                                    return `<div>${icon} ${response.responder}: ${response.message}</div>`;
-                                }).join('')}
-                            </div>
-                        ` : ''}
+                        <div class="alert-responses">
+                            ${responses.length ? responses.map(response => {
+                                const icon = this.getResponderIcon(response.responder);
+                                return `<div>${icon} ${response.responder}: <span class="alert-response-message">${response.message}</span></div>`;
+                            }).join('') : '<div>No responses yet.</div>'}
+                        </div>
                         <div class="alert-response-form" style="display: none;">
                             <textarea placeholder="Type response... (Shift+Enter for new line)"></textarea>
                             <button class="btn btn-secondary btn-small alert-send-btn">Send</button>
@@ -715,6 +713,7 @@ class ComplianceDashboard {
             if (!response.ok) {
                 throw new Error('Failed to respond to alert');
             }
+            this.showToast('Response added');
             this.loadAlerts();
         } catch (error) {
             console.error('Error responding to alert:', error);
