@@ -7,8 +7,6 @@ class ComplianceDashboard {
         this.charts = {};
         this.currentEditingId = null;
         this.currentUser = null;
-        this.lastAlertCount = 0;
-        this.alertRefreshTimer = null;
         
         // API base URL - configure for deployed environment
         this.apiBaseUrl = window.location.hostname === 'localhost' 
@@ -112,9 +110,6 @@ class ComplianceDashboard {
             }
         }
 
-        if (!this.alertRefreshTimer) {
-            this.alertRefreshTimer = setInterval(() => this.refreshAlertsSilently(), 60000);
-        }
     }
 
     async loadData() {
@@ -616,17 +611,6 @@ class ComplianceDashboard {
         }
     }
 
-    async refreshAlertsSilently() {
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/api/alerts`);
-            if (!response.ok) return;
-            const alerts = await response.json();
-            this.updateAlertBadge(alerts, true);
-        } catch (error) {
-            console.error('Error refreshing alerts:', error);
-        }
-    }
-
     renderAlerts(alerts) {
         const alertsList = document.getElementById('alertsList');
         if (!alertsList) return;
@@ -721,7 +705,6 @@ class ComplianceDashboard {
             if (!response.ok) {
                 throw new Error('Failed to respond to alert');
             }
-            this.showToast('Response added');
             this.loadAlerts();
         } catch (error) {
             console.error('Error responding to alert:', error);
@@ -775,40 +758,20 @@ class ComplianceDashboard {
         badge.style.display = 'inline-flex';
 
         if (silent && unresolvedCount > this.lastAlertCount && this.lastAlertCount !== 0) {
-            this.showToast('New alerts added');
         }
         this.lastAlertCount = unresolvedCount;
     }
 
     getResponderIcon(responder) {
         if (!responder) return '💬';
-        const name = responder.toLowerCase();
+    updateAlertBadge(alerts) {
         if (name === 'darian') return '<span class="avatar avatar-d">D</span>';
         if (name === 'loren') return '<span class="avatar avatar-l">L</span>';
         return '<span class="avatar">?</span>';
     }
 
     showToast(message) {
-        const container = document.getElementById('toastContainer');
-        if (!container) return;
-
-        const toast = document.createElement('div');
-        toast.className = 'toast';
         toast.textContent = message;
-        container.appendChild(toast);
-
-        setTimeout(() => {
-            toast.remove();
-        }, 4000);
-    }
-
-    async addGeneralAlert() {
-        const input = document.getElementById('generalAlertInput');
-        if (!input || !input.value.trim()) return;
-
-        try {
-            const response = await fetch(`${this.apiBaseUrl}/api/alerts/general`, {
-                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: input.value.trim(),

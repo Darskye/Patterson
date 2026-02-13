@@ -41,7 +41,7 @@
                 <div class="header-actions">
                     <button class="btn btn-primary" id="uploadBtn">📤 Upload Excel</button>
                     <button class="btn btn-secondary" id="exportBtn">📥 Export Excel</button>
-                    <button class="btn btn-secondary" id="alertsBtn">⚠️ Alerts</button>
+                    <button class="btn btn-secondary" id="alertsBtn">⚠️ Alerts <span id="alertsBadge" class="alerts-badge" style="display: none;">0</span></button>
                     <button class="btn btn-secondary" id="messagesBtn">💬 Messages</button>
                     <div class="user-badge" id="currentUserBadge">User: -</div>
                 </div>
@@ -190,7 +190,7 @@
                 <div class="alerts-card">
                     <h3>Add General Alert</h3>
                     <div class="alerts-input">
-                        <input type="text" id="generalAlertInput" placeholder="Type a general alert...">
+                        <textarea id="generalAlertInput" placeholder="Type a general alert... (Shift+Enter for new line)"></textarea>
                         <button class="btn btn-primary" id="addGeneralAlertBtn">Add Alert</button>
                     </div>
                 </div>
