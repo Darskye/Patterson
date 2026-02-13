@@ -6,7 +6,9 @@ class ComplianceDashboard {
         this.map = null;
         this.charts = {};
         this.currentEditingId = null;
-        this.currentUser = localStorage.getItem('currentUser');
+        this.currentUser = null;
+        this.lastAlertCount = 0;
+        this.alertRefreshTimer = null;
         
         // API base URL - configure for deployed environment
         this.apiBaseUrl = window.location.hostname === 'localhost' 
@@ -50,6 +52,11 @@ class ComplianceDashboard {
             }
         });
 
+        const alertsList = document.getElementById('alertsList');
+        if (alertsList) {
+            alertsList.addEventListener('click', (event) => this.handleAlertAction(event));
+        }
+
         // User select
         document.querySelectorAll('.user-select').forEach(button => {
             button.addEventListener('click', () => this.setCurrentUser(button.dataset.user));
@@ -75,16 +82,14 @@ class ComplianceDashboard {
     }
 
     initializeUser() {
-        if (!this.currentUser) {
-            document.getElementById('userModal').classList.add('active');
-            return;
+        const userModal = document.getElementById('userModal');
+        if (userModal) {
+            userModal.classList.add('active');
         }
-        this.updateUserUI();
     }
 
     setCurrentUser(user) {
         this.currentUser = user;
-        localStorage.setItem('currentUser', user);
         document.getElementById('userModal').classList.remove('active');
         this.updateUserUI();
     }
@@ -105,6 +110,10 @@ class ComplianceDashboard {
             if (messagesSection) {
                 messagesSection.style.display = 'none';
             }
+        }
+
+        if (!this.alertRefreshTimer) {
+            this.alertRefreshTimer = setInterval(() => this.refreshAlertsSilently(), 60000);
         }
     }
 
@@ -601,8 +610,20 @@ class ComplianceDashboard {
             }
             const alerts = await response.json();
             this.renderAlerts(alerts);
+            this.updateAlertBadge(alerts);
         } catch (error) {
             console.error('Error loading alerts:', error);
+        }
+    }
+
+    async refreshAlertsSilently() {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/api/alerts`);
+            if (!response.ok) return;
+            const alerts = await response.json();
+            this.updateAlertBadge(alerts, true);
+        } catch (error) {
+            console.error('Error refreshing alerts:', error);
         }
     }
 
@@ -619,15 +640,128 @@ class ComplianceDashboard {
             const meta = alert.type === 'general'
                 ? `General • ${alert.createdBy || 'System'}`
                 : `Plant • ${alert.plantName}`;
+            const resolvedLabel = alert.resolved ? 'Resolved' : 'Open';
+            const resolveBtnLabel = alert.resolved ? 'Reopen' : 'Resolve';
+            const responses = alert.responses || [];
             return `
-                <div class="alert-item">
+                <div class="alert-item" data-alert-id="${alert.id}" data-alert-type="${alert.type}">
                     <div>
                         <div>${alert.message}</div>
-                        <div class="alert-meta">${meta}</div>
+                        <div class="alert-meta">${meta} • ${resolvedLabel}</div>
+                        ${responses.length ? `
+                            <div class="alert-responses">
+                                ${responses.map(response => `${response.responder}: ${response.message}`).join('<br>')}
+                            </div>
+                        ` : ''}
+                        <div class="alert-response-form" style="display: none;">
+                            <input type="text" placeholder="Type response...">
+                            <button class="btn btn-secondary btn-small alert-send-btn">Send</button>
+                        </div>
+                    </div>
+                    <div class="alert-actions">
+                        <button class="btn btn-secondary btn-small alert-respond-btn">Respond</button>
+                        <button class="btn btn-secondary btn-small alert-resolve-btn">${resolveBtnLabel}</button>
                     </div>
                 </div>
             `;
         }).join('');
+    }
+
+    handleAlertAction(event) {
+        const item = event.target.closest('.alert-item');
+        if (!item) return;
+
+        const alertId = item.dataset.alertId;
+        const alertType = item.dataset.alertType;
+
+        if (event.target.classList.contains('alert-respond-btn')) {
+            const form = item.querySelector('.alert-response-form');
+            if (form) {
+                form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+            }
+            return;
+        }
+
+        if (event.target.classList.contains('alert-send-btn')) {
+            event.preventDefault();
+            const input = item.querySelector('.alert-response-form input');
+            if (input && input.value.trim()) {
+                this.sendAlertResponse(alertType, alertId, input.value.trim());
+                input.value = '';
+            }
+            return;
+        }
+
+        if (event.target.classList.contains('alert-resolve-btn')) {
+            const shouldResolve = event.target.textContent.trim() !== 'Reopen';
+            this.resolveAlert(alertType, alertId, shouldResolve);
+        }
+    }
+
+    async sendAlertResponse(alertType, alertId, message) {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/api/alerts/${alertType}/${alertId}/respond`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    responder: this.currentUser || 'System',
+                    message
+                })
+            });
+            if (!response.ok) {
+                throw new Error('Failed to respond to alert');
+            }
+            this.loadAlerts();
+        } catch (error) {
+            console.error('Error responding to alert:', error);
+        }
+    }
+
+    async resolveAlert(alertType, alertId, resolved) {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/api/alerts/${alertType}/${alertId}/resolve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    resolved,
+                    resolvedBy: this.currentUser || 'System'
+                })
+            });
+            if (!response.ok) {
+                throw new Error('Failed to update alert');
+            }
+            this.loadAlerts();
+        } catch (error) {
+            console.error('Error resolving alert:', error);
+        }
+    }
+
+    updateAlertBadge(alerts, silent = false) {
+        const badge = document.getElementById('alertsBadge');
+        if (!badge) return;
+
+        const unresolvedCount = alerts.filter(alert => !alert.resolved).length;
+        badge.textContent = unresolvedCount;
+        badge.style.display = unresolvedCount > 0 ? 'inline-flex' : 'none';
+
+        if (silent && unresolvedCount > this.lastAlertCount && this.lastAlertCount !== 0) {
+            this.showToast('New alerts added');
+        }
+        this.lastAlertCount = unresolvedCount;
+    }
+
+    showToast(message) {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.remove();
+        }, 4000);
     }
 
     async addGeneralAlert() {
