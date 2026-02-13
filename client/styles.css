@@ -544,13 +544,16 @@ body {
     gap: 10px;
 }
 
-.alerts-input input {
+.alerts-input textarea {
     flex: 1;
     padding: 10px 12px;
     border-radius: 6px;
     border: 1px solid var(--border-color);
     background-color: #131a1f;
     color: var(--text-primary);
+    min-height: 60px;
+    resize: vertical;
+    font-family: inherit;
 }
 
 .alerts-list {
@@ -570,9 +573,73 @@ body {
     gap: 16px;
 }
 
+.alert-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.alert-response-form {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+}
+
+.alert-response-form textarea {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background-color: #131a1f;
+    color: var(--text-primary);
+    min-height: 48px;
+    resize: vertical;
+    font-family: inherit;
+}
+
+.alert-responses {
+    margin-top: 10px;
+    display: grid;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.alerts-badge {
+    margin-left: 6px;
+    background-color: var(--danger);
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 6px;
+    border-radius: 999px;
+}
+
+.toast-container {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    display: grid;
+    gap: 10px;
+    z-index: 2000;
+}
+
+.toast {
+    background-color: #1d2a31;
+    color: #fff;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+    font-size: 13px;
+}
+
 .alert-meta {
     color: var(--text-secondary);
     font-size: 12px;
+}
+
+.alert-message {
+    white-space: pre-wrap;
 }
 
 .alert-icon {

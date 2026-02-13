@@ -642,25 +642,29 @@ class ComplianceDashboard {
                 : `Plant • ${alert.plantName}`;
             const resolvedLabel = alert.resolved ? 'Resolved' : 'Open';
             const resolveBtnLabel = alert.resolved ? 'Reopen' : 'Resolve';
+            const canResolve = this.currentUser === 'Darian';
             const responses = alert.responses || [];
             return `
                 <div class="alert-item" data-alert-id="${alert.id}" data-alert-type="${alert.type}">
                     <div>
-                        <div>${alert.message}</div>
+                        <div class="alert-message">${alert.message}</div>
                         <div class="alert-meta">${meta} • ${resolvedLabel}</div>
                         ${responses.length ? `
                             <div class="alert-responses">
-                                ${responses.map(response => `${response.responder}: ${response.message}`).join('<br>')}
+                                ${responses.map(response => {
+                                    const icon = this.getResponderIcon(response.responder);
+                                    return `<div>${icon} ${response.responder}: ${response.message}</div>`;
+                                }).join('')}
                             </div>
                         ` : ''}
                         <div class="alert-response-form" style="display: none;">
-                            <input type="text" placeholder="Type response...">
+                            <textarea placeholder="Type response... (Shift+Enter for new line)"></textarea>
                             <button class="btn btn-secondary btn-small alert-send-btn">Send</button>
                         </div>
                     </div>
                     <div class="alert-actions">
                         <button class="btn btn-secondary btn-small alert-respond-btn">Respond</button>
-                        <button class="btn btn-secondary btn-small alert-resolve-btn">${resolveBtnLabel}</button>
+                        ${canResolve ? `<button class="btn btn-secondary btn-small alert-resolve-btn">${resolveBtnLabel}</button>` : ''}
                     </div>
                 </div>
             `;
@@ -684,7 +688,7 @@ class ComplianceDashboard {
 
         if (event.target.classList.contains('alert-send-btn')) {
             event.preventDefault();
-            const input = item.querySelector('.alert-response-form input');
+            const input = item.querySelector('.alert-response-form textarea');
             if (input && input.value.trim()) {
                 this.sendAlertResponse(alertType, alertId, input.value.trim());
                 input.value = '';
@@ -748,6 +752,14 @@ class ComplianceDashboard {
             this.showToast('New alerts added');
         }
         this.lastAlertCount = unresolvedCount;
+    }
+
+    getResponderIcon(responder) {
+        if (!responder) return '💬';
+        const name = responder.toLowerCase();
+        if (name === 'darian') return '🧑‍💼';
+        if (name === 'loren') return '👩‍💼';
+        return '💬';
     }
 
     showToast(message) {
