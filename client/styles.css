@@ -598,9 +598,10 @@ body {
     border: 1px solid var(--border-color);
     background-color: #131a1f;
     color: var(--text-primary);
-    min-height: 48px;
+    min-height: 120px;
     resize: vertical;
     font-family: inherit;
+    width: 100%;
 }
 
 .alert-responses {
