@@ -684,6 +684,67 @@ app.post('/api/alerts/:type/:id/resolve', async (req, res) => {
   }
 });
 
+app.delete('/api/alerts/:type/:id', async (req, res) => {
+  try {
+    const alertType = String(req.params.type || '').toLowerCase();
+    const alertId = parseInt(req.params.id);
+    const deletedBy = String(req.body.deletedBy || 'System').trim();
+
+    if (!['general', 'plant'].includes(alertType)) {
+      return res.status(400).json({ error: 'Invalid alert type' });
+    }
+    if (!alertId) {
+      return res.status(400).json({ error: 'Alert ID is required' });
+    }
+    if (deletedBy.toLowerCase() !== 'darian') {
+      return res.status(403).json({ error: 'Only Darian can delete alerts' });
+    }
+
+    if (useDatabase) {
+      await pool.query(
+        'DELETE FROM alert_responses WHERE alert_type = $1 AND alert_id = $2',
+        [alertType, alertId]
+      );
+      await pool.query(
+        'DELETE FROM alert_resolutions WHERE alert_type = $1 AND alert_id = $2',
+        [alertType, alertId]
+      );
+
+      if (alertType === 'general') {
+        await pool.query('DELETE FROM general_alerts WHERE id = $1', [alertId]);
+      } else {
+        await updatePlantRecord(alertId, { notes: '' });
+      }
+
+      return res.json({ success: true });
+    }
+
+    cachedAlertResponses = cachedAlertResponses.filter(
+      response => !(response.alertType === alertType && response.alertId === alertId)
+    );
+    cachedAlertResolutions = cachedAlertResolutions.filter(
+      resolution => !(resolution.alertType === alertType && resolution.alertId === alertId)
+    );
+
+    if (alertType === 'general') {
+      cachedGeneralAlerts = cachedGeneralAlerts.filter(alert => alert.id !== alertId);
+    } else {
+      const data = cachedData || loadData();
+      if (data) {
+        const plant = data.find(p => p.id === alertId);
+        if (plant) {
+          plant.notes = '';
+          saveData(data);
+        }
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get messages between Darian and Loren
 app.get('/api/messages', async (req, res) => {
   try {

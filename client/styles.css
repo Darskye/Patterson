@@ -542,6 +542,7 @@ body {
 .alerts-input {
     display: flex;
     gap: 10px;
+    flex-direction: column;
 }
 
 .alerts-input textarea {
@@ -551,9 +552,14 @@ body {
     border: 1px solid var(--border-color);
     background-color: #131a1f;
     color: var(--text-primary);
-    min-height: 60px;
+    min-height: 180px;
     resize: vertical;
     font-family: inherit;
+    width: 100%;
+}
+
+.alerts-input button {
+    align-self: flex-end;
 }
 
 .alerts-list {
@@ -612,6 +618,31 @@ body {
     font-size: 11px;
     padding: 2px 6px;
     border-radius: 999px;
+    min-width: 20px;
+    display: inline-flex;
+    justify-content: center;
+}
+
+.avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: #2d3a44;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    margin-right: 6px;
+}
+
+.avatar-d {
+    background-color: #1a9b8e;
+}
+
+.avatar-l {
+    background-color: #3498db;
 }
 
 .toast-container {
@@ -640,6 +671,12 @@ body {
 
 .alert-message {
     white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.alert-response-message {
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 .alert-icon {

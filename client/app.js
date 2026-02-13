@@ -652,7 +652,7 @@ class ComplianceDashboard {
                         <div class="alert-responses">
                             ${responses.length ? responses.map(response => {
                                 const icon = this.getResponderIcon(response.responder);
-                                return `<div>${icon} ${response.responder}: <span class="alert-response-message">${response.message}</span></div>`;
+                                return `<div>${icon} <strong>${response.responder}:</strong> <span class="alert-response-message">${response.message}</span></div>`;
                             }).join('') : '<div>No responses yet.</div>'}
                         </div>
                         <div class="alert-response-form" style="display: none;">
@@ -663,6 +663,7 @@ class ComplianceDashboard {
                     <div class="alert-actions">
                         <button class="btn btn-secondary btn-small alert-respond-btn">Respond</button>
                         ${canResolve ? `<button class="btn btn-secondary btn-small alert-resolve-btn">${resolveBtnLabel}</button>` : ''}
+                        ${canResolve ? `<button class="btn btn-secondary btn-small alert-delete-btn">Delete</button>` : ''}
                     </div>
                 </div>
             `;
@@ -697,6 +698,13 @@ class ComplianceDashboard {
         if (event.target.classList.contains('alert-resolve-btn')) {
             const shouldResolve = event.target.textContent.trim() !== 'Reopen';
             this.resolveAlert(alertType, alertId, shouldResolve);
+            return;
+        }
+
+        if (event.target.classList.contains('alert-delete-btn')) {
+            if (confirm('Delete this alert? This cannot be undone.')) {
+                this.deleteAlert(alertType, alertId);
+            }
         }
     }
 
@@ -739,13 +747,32 @@ class ComplianceDashboard {
         }
     }
 
+    async deleteAlert(alertType, alertId) {
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/api/alerts/${alertType}/${alertId}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    deletedBy: this.currentUser || 'System'
+                })
+            });
+            if (!response.ok) {
+                throw new Error('Failed to delete alert');
+            }
+            this.showToast('Alert deleted');
+            this.loadAlerts();
+        } catch (error) {
+            console.error('Error deleting alert:', error);
+        }
+    }
+
     updateAlertBadge(alerts, silent = false) {
         const badge = document.getElementById('alertsBadge');
         if (!badge) return;
 
         const unresolvedCount = alerts.filter(alert => !alert.resolved).length;
         badge.textContent = unresolvedCount;
-        badge.style.display = unresolvedCount > 0 ? 'inline-flex' : 'none';
+        badge.style.display = 'inline-flex';
 
         if (silent && unresolvedCount > this.lastAlertCount && this.lastAlertCount !== 0) {
             this.showToast('New alerts added');
@@ -756,9 +783,9 @@ class ComplianceDashboard {
     getResponderIcon(responder) {
         if (!responder) return '💬';
         const name = responder.toLowerCase();
-        if (name === 'darian') return '🧑‍💼';
-        if (name === 'loren') return '👩‍💼';
-        return '💬';
+        if (name === 'darian') return '<span class="avatar avatar-d">D</span>';
+        if (name === 'loren') return '<span class="avatar avatar-l">L</span>';
+        return '<span class="avatar">?</span>';
     }
 
     showToast(message) {
