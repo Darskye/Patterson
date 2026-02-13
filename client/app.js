@@ -742,36 +742,36 @@ class ComplianceDashboard {
             if (!response.ok) {
                 throw new Error('Failed to delete alert');
             }
-            this.showToast('Alert deleted');
             this.loadAlerts();
         } catch (error) {
             console.error('Error deleting alert:', error);
         }
     }
 
-    updateAlertBadge(alerts, silent = false) {
+    updateAlertBadge(alerts) {
         const badge = document.getElementById('alertsBadge');
         if (!badge) return;
 
         const unresolvedCount = alerts.filter(alert => !alert.resolved).length;
         badge.textContent = unresolvedCount;
         badge.style.display = 'inline-flex';
-
-        if (silent && unresolvedCount > this.lastAlertCount && this.lastAlertCount !== 0) {
-        }
-        this.lastAlertCount = unresolvedCount;
     }
 
     getResponderIcon(responder) {
-        if (!responder) return '💬';
-    updateAlertBadge(alerts) {
+        if (!responder) return '<span class="avatar">?</span>';
+        const name = responder.toLowerCase();
         if (name === 'darian') return '<span class="avatar avatar-d">D</span>';
         if (name === 'loren') return '<span class="avatar avatar-l">L</span>';
         return '<span class="avatar">?</span>';
     }
 
-    showToast(message) {
-        toast.textContent = message;
+    async addGeneralAlert() {
+        const input = document.getElementById('generalAlertInput');
+        if (!input || !input.value.trim()) return;
+
+        try {
+            const response = await fetch(`${this.apiBaseUrl}/api/alerts/general`, {
+                method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     message: input.value.trim(),
