@@ -11,7 +11,7 @@ class ComplianceDashboard {
         // API base URL - configure for deployed environment
         this.apiBaseUrl = window.location.hostname === 'localhost' 
             ? 'http://localhost:5000' 
-            : 'https://patterson-production.up.railway.app';
+            : window.location.origin;
 
         this.initializeEventListeners();
         this.initializeUser();

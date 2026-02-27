@@ -1,6 +1,7 @@
 [build]
 command = "echo 'Frontend ready for deployment'"
 publish = "client"
+functions = "netlify/functions"
 
 [[redirects]]
 from = "/api/*"
