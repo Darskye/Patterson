@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en" data-theme="ice">
+<head>
+<meta charset="utf-8">
+<title>VAN OPS · NETWORK MAP</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/augmented-ui.min.css">
+<link rel="stylesheet" href="../assets/core.css">
+<style>
+  .net-stage { grid-template-columns: minmax(0,1fr) 300px; }
+  #net { width: 100%; height: 100%; display: block; }
+  .edge { stroke: var(--line-hard); stroke-width: 1.2; fill: none; }
+  .edge.hot { stroke: var(--hi); stroke-width: 1.8; filter: drop-shadow(0 0 5px currentColor); }
+  .pkt { fill: var(--hi); filter: drop-shadow(0 0 5px currentColor); }
+  .pkt.probe { fill: var(--accent); }
+  .nd { cursor: pointer; }
+  .nd .hexa { fill: rgba(6,12,18,.92); stroke: var(--line-hard); stroke-width: 1.6; transition: stroke .3s, fill .3s; }
+  .nd .glyph { fill: var(--dim); transition: fill .3s; }
+  .nd .nm { font: 500 10px 'JetBrains Mono', monospace; letter-spacing: .16em; fill: var(--fg);
+            paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round; }
+  .nd .ip { font: 400 8.5px 'JetBrains Mono', monospace; letter-spacing: .1em; fill: var(--dim);
+            paint-order: stroke; stroke: var(--bg); stroke-width: 3.5; stroke-linejoin: round; }
+  .nd.scan .hexa { stroke: var(--accent); }
+  .nd.scan .glyph { fill: var(--accent); }
+  .nd.own .hexa { stroke: var(--hi); fill: rgba(10,26,22,.95); filter: drop-shadow(0 0 9px currentColor); }
+  .nd.own .glyph { fill: var(--hi); }
+  .nd.own .nm { fill: var(--hi); }
+  .nd.sel .hexa { stroke-width: 3; }
+  .nd:hover .hexa { stroke: var(--hi); }
+  .ripple { fill: none; stroke: var(--accent); stroke-width: 1; opacity: 0; }
+  .nd.scan .ripple { animation: rip 1.9s ease-out infinite; }
+  @keyframes rip { 0% { r: 20; opacity: .8 } 100% { r: 62; opacity: 0 } }
+  .own-tag { font: 700 7.5px 'JetBrains Mono', monospace; letter-spacing: .2em; fill: var(--bg); }
+  .own-tag-bg { fill: var(--hi); }
+  .netlbl { font: 400 9px 'JetBrains Mono', monospace; letter-spacing: .3em; fill: var(--dim); }
+
+  .nrow { display: grid; grid-template-columns: 1fr auto; gap: 6px; font-size: 10.5px;
+          padding: 3px 5px; cursor: pointer; border-bottom: 1px dotted var(--line); }
+  .nrow:hover { background: rgba(111,216,255,.08); }
+  .nrow.sel { background: rgba(111,216,255,.14); }
+  .nrow .s { font-size: 9px; letter-spacing: .16em; }
+  .nrow .s.OWNED { color: var(--hi); } .nrow .s.SCAN { color: var(--accent); } .nrow .s.CLOSED { color: var(--dim); }
+  #tgraph { width: 100%; height: 84px; display: block; }
+</style>
+</head>
+<body>
+<div class="viewport">
+  <header class="topbar" data-augmented-ui="tl-clip br-clip border">
+    <span class="brand">TOPOLOGY<small> /10.42.7.0-24</small></span>
+    <span class="sep"></span>
+    <span class="label">GATEWAY</span><span class="val">203.0.113.44</span>
+    <span class="sep"></span>
+    <span class="label">HOSTS</span><span class="val" id="nhosts">11</span>
+    <span class="sep"></span>
+    <span class="label">OWNED</span><span class="hi" id="nown">0</span>
+    <span class="spacer"></span>
+    <div class="phasestrip" data-auto></div>
+    <span class="sep"></span>
+    <span class="hi tabular" data-van="clock">00:00:00</span>
+  </header>
+
+  <main class="stage net-stage">
+    <section class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">LATERAL MOVEMENT <span class="t-right" id="pathlbl">—</span></h2>
+      <div class="panel-body flush"><svg id="net" viewBox="0 0 1000 620" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </section>
+
+    <aside class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">HOSTS</h2>
+      <div class="panel-body" style="padding:6px 8px">
+        <div id="nlist"></div>
+
+        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">HOST DETAIL</h2>
+        <div class="readout" id="ndetail"></div>
+
+        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">THROUGHPUT</h2>
+        <canvas id="tgraph"></canvas>
+        <div class="readout" style="margin-top:6px">
+          <dt>In</dt><dd id="t-in">—</dd>
+          <dt>Out</dt><dd id="t-out">—</dd>
+          <dt>Latency</dt><dd id="t-lat">—</dd>
+          <dt>Retrans</dt><dd id="t-re">—</dd>
+        </div>
+
+        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">PIVOT</h2>
+        <div class="btn-row">
+          <button class="btn" id="b-next" data-augmented-ui="tl-clip br-clip border">ADVANCE [SPACE]</button>
+          <button class="btn danger" id="b-reset" data-augmented-ui="tl-clip br-clip border">DROP [\]</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span>ROUTE <b id="s-route">wan → fw</b></span>
+    <span>OWNED <b class="hi" id="s-own">0/11</b></span>
+    <span>C2 <b class="ok">HEARTBEAT 30S</b></span>
+    <span class="spacer"></span>
+    <span class="dim">[SPACE] ADVANCE PIVOT · [1-5] PHASE · [\] DROP ALL · [?] KEYS</span>
+  </footer>
+</div>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/data.js"></script>
+<script>
+(function () {
+  'use strict';
+  const { NETWORK } = VANDATA;
+  VAN.helpExtra = [['Space', 'Own the next host along the intrusion path'], ['\\', 'Drop every session and start the map over']];
+  VAN.init({ name: 'NETMAP', code: 'N-03' });
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const mk = (t, a) => { const e = document.createElementNS(SVGNS, t); for (const k in (a || {})) e.setAttribute(k, a[k]); return e; };
+  const svg = VAN.$('#net'), W = 1000, H = 620, PAD = 74;
+  const px = n => PAD + n.x * (W - PAD * 2), py = n => PAD + n.y * (H - PAD * 2);
+
+  /* the order the operator walks the network */
+  const PATH = ['wan', 'fw', 'sw', 'ap', 'nvr', 'cams', 'alarm', 'bms', 'door', 'nas', 'pc'];
+  let owned = 0, sel = 'fw';
+
+  const GLYPH = {
+    edge: 'M-7 -4 h14 v8 h-14 z M-3 4 v4 M3 4 v4',
+    sec:  'M0 -8 l7 4 v6 c0 4 -3 6 -7 8 c-4 -2 -7 -4 -7 -8 v-6 z',
+    net:  'M-8 -5 h16 v10 h-16 z M-5 -1 h3 M0 -1 h3',
+    cam:  'M-8 -5 h11 v10 h-11 z M3 -2 l5 -3 v10 l-5 -3 z',
+    ops:  'M0 -8 a8 8 0 1 0 0.1 0 M0 -3 a3 3 0 1 0 0.1 0',
+    data: 'M-7 -6 h14 v12 h-14 z M-7 -2 h14 M-7 2 h14'
+  };
+
+  function build() {
+    svg.textContent = '';
+    const defs = mk('defs');
+    defs.innerHTML = '<filter id="soft"><feGaussianBlur stdDeviation="2.4"/></filter>';
+    svg.appendChild(defs);
+
+    // segment captions
+    [['EDGE', .12, .06], ['CORE', .42, .06], ['CAMERA VLAN', .74, .04], ['BUILDING SYSTEMS', .70, .95]]
+      .forEach(([t, x, y]) => {
+        const e = mk('text', { x: PAD + x * (W - PAD * 2), y: PAD + y * (H - PAD * 2), class: 'netlbl', 'text-anchor': 'middle' });
+        e.textContent = t; svg.appendChild(e);
+      });
+
+    const eg = mk('g', { id: 'edges' });
+    NETWORK.edges.forEach(([a, b]) => {
+      const na = NETWORK.nodes.find(n => n.id === a), nb = NETWORK.nodes.find(n => n.id === b);
+      const mx = (px(na) + px(nb)) / 2;
+      eg.appendChild(mk('path', {
+        class: 'edge', 'data-a': a, 'data-b': b,
+        d: 'M' + px(na) + ' ' + py(na) + ' C' + mx + ' ' + py(na) + ' ' + mx + ' ' + py(nb) + ' ' + px(nb) + ' ' + py(nb)
+      }));
+    });
+    svg.appendChild(eg);
+    svg.appendChild(mk('g', { id: 'pkts' }));
+
+    const ng = mk('g', { id: 'nodes' });
+    NETWORK.nodes.forEach(n => {
+      const g = mk('g', { class: 'nd', 'data-id': n.id, transform: 'translate(' + px(n) + ',' + py(n) + ')' });
+      g.appendChild(mk('circle', { class: 'ripple', r: 20 }));
+      const R = 21, pts = [];
+      for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + i * Math.PI / 3; pts.push([R * Math.cos(a), R * Math.sin(a)]); }
+      g.appendChild(mk('polygon', { class: 'hexa', points: pts.map(p => p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ') }));
+      g.appendChild(mk('path', { class: 'glyph', d: GLYPH[n.type] || GLYPH.net, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4 }));
+      const nm = mk('text', { class: 'nm', y: 38, 'text-anchor': 'middle' }); nm.textContent = n.name;
+      const ip = mk('text', { class: 'ip', y: 50, 'text-anchor': 'middle' }); ip.textContent = n.ip;
+      g.append(nm, ip);
+      const tb = mk('rect', { class: 'own-tag-bg', x: -19, y: -36, width: 38, height: 12, opacity: 0 });
+      const tt = mk('text', { class: 'own-tag', y: -27, 'text-anchor': 'middle', opacity: 0 }); tt.textContent = 'OWNED';
+      g.append(tb, tt);
+      g.addEventListener('click', () => { sel = n.id; paint(); });
+      ng.appendChild(g);
+    });
+    svg.appendChild(ng);
+  }
+
+  function stateOf(id) {
+    const i = PATH.indexOf(id);
+    if (i < owned) return 'OWNED';
+    if (i === owned) return 'SCAN';
+    return 'CLOSED';
+  }
+
+  function paint() {
+    VAN.$$('.nd', svg).forEach(g => {
+      const st = stateOf(g.dataset.id);
+      g.classList.toggle('own', st === 'OWNED');
+      g.classList.toggle('scan', st === 'SCAN');
+      g.classList.toggle('sel', g.dataset.id === sel);
+      const o = st === 'OWNED' ? 1 : 0;
+      g.querySelector('.own-tag-bg').setAttribute('opacity', o);
+      g.querySelector('.own-tag').setAttribute('opacity', o);
+    });
+    VAN.$$('.edge', svg).forEach(e => {
+      e.classList.toggle('hot', stateOf(e.dataset.a) === 'OWNED' && stateOf(e.dataset.b) !== 'CLOSED');
+    });
+    VAN.$('#nlist').innerHTML = NETWORK.nodes.map(n => {
+      const st = stateOf(n.id);
+      return '<div class="nrow' + (n.id === sel ? ' sel' : '') + '" data-id="' + n.id + '">' +
+        '<span>' + n.name + '<br><span class="dim" style="font-size:9.5px">' + n.ip + '</span></span>' +
+        '<span class="s ' + st + '">' + st + '</span></div>';
+    }).join('');
+    VAN.$$('#nlist .nrow').forEach(r => r.addEventListener('click', () => { sel = r.dataset.id; paint(); }));
+
+    const n = NETWORK.nodes.find(x => x.id === sel);
+    const st = stateOf(sel);
+    VAN.$('#ndetail').innerHTML = [
+      ['Host', n.name], ['Address', n.ip], ['Class', n.type.toUpperCase()],
+      ['State', st], ['Open', st === 'CLOSED' ? '—' : '22,80,443'],
+      ['Session', st === 'OWNED' ? 'root · persistent' : st === 'SCAN' ? 'probing' : 'none']
+    ].map(([k, v]) => '<dt>' + k + '</dt><dd class="' + (st === 'OWNED' && k === 'State' ? 'hi' : '') + '">' + v + '</dd>').join('');
+
+    VAN.$('#nown').textContent = owned;
+    VAN.$('#s-own').textContent = owned + '/' + PATH.length;
+    const from = PATH[Math.max(0, owned - 1)], to = PATH[Math.min(PATH.length - 1, owned)];
+    VAN.$('#s-route').textContent = from + ' → ' + to;
+    VAN.$('#pathlbl').textContent = owned >= PATH.length ? 'FULL CONTROL' : 'HOP ' + (owned + 1) + ' OF ' + PATH.length;
+  }
+
+  /* ---------- packets ---------- */
+  const pkts = [];
+  function spawn() {
+    const live = NETWORK.edges.filter(([a, b]) => stateOf(a) === 'OWNED' && stateOf(b) !== 'CLOSED');
+    if (!live.length) return;
+    const [a, b] = VAN.pick(live);
+    const na = NETWORK.nodes.find(n => n.id === a), nb = NETWORK.nodes.find(n => n.id === b);
+    const probe = stateOf(b) === 'SCAN';
+    const c = mk('circle', { class: 'pkt' + (probe ? ' probe' : ''), r: probe ? 2.4 : 3 });
+    VAN.$('#pkts').appendChild(c);
+    pkts.push({ el: c, ax: px(na), ay: py(na), bx: px(nb), by: py(nb), t: 0, sp: 0.6 + Math.random() * 0.7 });
+  }
+  VAN.loop(dt => {
+    if (Math.random() < 0.22) spawn();
+    for (let i = pkts.length - 1; i >= 0; i--) {
+      const p = pkts[i];
+      p.t += dt * p.sp;
+      if (p.t >= 1) { p.el.remove(); pkts.splice(i, 1); continue; }
+      const mx = (p.ax + p.bx) / 2, t = p.t, u = 1 - t;
+      p.el.setAttribute('cx', (u * u * u * p.ax + 3 * u * u * t * mx + 3 * u * t * t * mx + t * t * t * p.bx).toFixed(1));
+      p.el.setAttribute('cy', (u * u * u * p.ay + 3 * u * u * t * p.ay + 3 * u * t * t * p.by + t * t * t * p.by).toFixed(1));
+      p.el.setAttribute('opacity', Math.sin(t * Math.PI).toFixed(2));
+    }
+  });
+
+  /* ---------- throughput graph ---------- */
+  const tg = VAN.$('#tgraph'), tfit = VAN.fit(tg), hist = new Array(90).fill(0.1);
+  VAN.loop(() => {
+    const w = tfit.w, h = tfit.h, g = tfit.ctx;
+    if (!w) return;
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(120,200,255,.10)';
+    for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(0, h * i / 4); g.lineTo(w, h * i / 4); g.stroke(); }
+    g.beginPath();
+    hist.forEach((v, i) => { const x = i / (hist.length - 1) * w, y = h - v * h * .92 - 2; i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--hi').trim() || '#6fd8ff';
+    g.lineWidth = 1.4; g.stroke();
+    g.lineTo(w, h); g.lineTo(0, h); g.closePath();
+    g.globalAlpha = .12; g.fill(); g.globalAlpha = 1;
+  });
+  setInterval(() => {
+    hist.shift();
+    hist.push(VAN.clamp(0.12 + owned * 0.06 + Math.random() * 0.4, 0, 1));
+    VAN.$('#t-in').textContent = (18 + owned * 9 + Math.random() * 30 | 0) + ' KB/s';
+    VAN.$('#t-out').textContent = (4 + Math.random() * 14 | 0) + ' KB/s';
+    VAN.$('#t-lat').textContent = (7 + Math.random() * 6).toFixed(1) + ' ms';
+    VAN.$('#t-re').textContent = (Math.random() * 0.4).toFixed(2) + ' %';
+  }, 420);
+
+  /* ---------- control ---------- */
+  function advance() { if (owned < PATH.length) { owned++; paint(); } }
+  function drop() { owned = 0; paint(); }
+  VAN.$('#b-next').addEventListener('click', advance);
+  VAN.$('#b-reset').addEventListener('click', drop);
+  VAN.keys({ ' ': advance, '\\': drop });
+  VAN.on('phase', p => { owned = Math.min(PATH.length, [0, 3, 7, 10, 11][p]); paint(); });
+
+  build(); paint();
+})();
+</script>
+</body>
+</html>

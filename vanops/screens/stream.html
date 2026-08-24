@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en" data-theme="phosphor">
+<head>
+<meta charset="utf-8">
+<title>VAN OPS · DATA WALL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/augmented-ui.min.css">
+<link rel="stylesheet" href="../assets/core.css">
+<style>
+  .st-stage { grid-template-columns: 300px minmax(0,1fr) minmax(0,1.15fr) 300px; }
+  .feed { font-size: 11px; line-height: 1.5; overflow: hidden; display: flex; flex-direction: column-reverse; height: 100%; }
+  .feed div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .feed .t { color: var(--dim); }
+  .feed .w { color: var(--warn); }
+  .feed .b { color: var(--alarm); }
+  .feed .g { color: var(--hi); }
+  .pkt-tbl { font-size: 10.5px; width: 100%; border-collapse: collapse; }
+  .pkt-tbl td { padding: 1.5px 6px; border-bottom: 1px dotted var(--line); white-space: nowrap; }
+  .pkt-tbl td.n { text-align: right; font-variant-numeric: tabular-nums; color: var(--dim); }
+  .sparks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .spark { border: 1px solid var(--line); padding: 6px 8px; }
+  .spark .lab { font-size: 8.5px; letter-spacing: .2em; color: var(--dim); text-transform: uppercase; }
+  .spark .num { font-size: 15px; color: var(--hi); font-variant-numeric: tabular-nums; }
+  .spark canvas { width: 100%; height: 26px; display: block; margin-top: 2px; }
+  .hexpool { font-size: 10.5px; line-height: 1.42; color: var(--dim); letter-spacing: .04em; word-break: break-all; }
+  .hexpool b { color: var(--hi); font-weight: 400; }
+</style>
+</head>
+<body>
+<div class="viewport">
+  <header class="topbar" data-augmented-ui="tl-clip br-clip border">
+    <span class="brand">TAP<small> /PASSIVE</small></span>
+    <span class="sep"></span>
+    <span class="label">IFACE</span><span class="val">wlan0mon · MONITOR</span>
+    <span class="sep"></span>
+    <span class="label">CAPTURED</span><span class="hi tabular" id="cap">0</span>
+    <span class="sep"></span>
+    <span class="label">DROPPED</span><span class="val tabular" id="drop">0</span>
+    <span class="spacer"></span>
+    <div class="phasestrip" data-auto></div>
+    <span class="sep"></span>
+    <span class="hi tabular" data-van="clock">00:00:00</span>
+  </header>
+
+  <main class="stage st-stage">
+    <section class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">ENTROPY POOL</h2>
+      <div class="panel-body flush" style="padding:0"><div class="canvas-host"><canvas id="rain"></canvas></div></div>
+    </section>
+
+    <section class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">SYSLOG <span class="t-right">10.42.7.0/24</span></h2>
+      <div class="panel-body flush" style="padding:8px 12px"><div class="feed" id="logs"></div></div>
+    </section>
+
+    <section class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">PACKET CAPTURE <span class="t-right" id="pps">— pps</span></h2>
+      <div class="panel-body flush" style="padding:6px 10px;overflow:hidden">
+        <table class="pkt-tbl"><tbody id="pkts"></tbody></table>
+      </div>
+    </section>
+
+    <aside class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">COUNTERS</h2>
+      <div class="panel-body">
+        <div class="sparks" style="grid-template-columns:repeat(2,1fr)" id="sparks"></div>
+        <h2 class="panel-title" style="margin:14px -12px 8px;padding-left:12px">KEY MATERIAL</h2>
+        <div class="hexpool" id="pool"></div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span>TAP <b class="ok">PASSIVE · NO INJECT</b></span>
+    <span>SESSION <b class="tabular" data-van="uptime">00:00</b></span>
+    <span>STORE <b id="s-store">0 MB</b></span>
+    <span class="spacer"></span>
+    <span class="dim">BACKGROUND PLATE — NO INPUT REQUIRED · [1-5] PHASE · [?] KEYS</span>
+  </footer>
+</div>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/data.js"></script>
+<script>
+(function () {
+  'use strict';
+  const { LOGS, FICTION } = VANDATA;
+  VAN.init({ name: 'STREAM', code: 'D-08' });
+
+  /* ---------- hex rain ---------- */
+  const rain = VAN.$('#rain'), rfit = VAN.fit(rain);
+  const CH = '0123456789ABCDEF';
+  let cols = [], colW = 12, rowH = 15;
+  function seed() {
+    const n = Math.max(1, Math.ceil(rfit.w / colW));
+    const rows = Math.max(10, rfit.h / rowH);
+    cols = Array.from({ length: n }, () => ({
+      y: Math.random() * rows * 1.4, sp: 7 + Math.random() * 24, len: 12 + (Math.random() * 26 | 0)
+    }));
+  }
+  VAN.loop(dt => {
+    const w = rfit.w, h = rfit.h, g = rfit.ctx;
+    if (!w) return;
+    if (cols.length !== Math.max(1, Math.ceil(w / colW))) seed();
+    g.fillStyle = 'rgba(4,7,10,.17)';
+    g.fillRect(0, 0, w, h);
+    g.font = "12px 'JetBrains Mono', ui-monospace, monospace";
+    const col = getComputedStyle(document.documentElement).getPropertyValue('--hi').trim() || '#5cffb1';
+    cols.forEach((c, i) => {
+      c.y += c.sp * dt;
+      const head = Math.floor(c.y);
+      for (let k = 0; k < c.len; k++) {
+        const row = head - k;
+        if (row < 0 || row * rowH > h) continue;
+        g.globalAlpha = k === 0 ? 1 : Math.max(0, 0.55 - k / c.len * 0.55);
+        g.fillStyle = k === 0 ? '#dffaef' : col;
+        g.fillText(CH[(Math.random() * 16) | 0], i * colW + 2, row * rowH + 12);
+      }
+      if ((head - c.len) * rowH > h) { c.y = -Math.random() * 12; c.sp = 7 + Math.random() * 24; c.len = 12 + (Math.random() * 26 | 0); }
+    });
+    g.globalAlpha = 1;
+  });
+
+  /* ---------- syslog ---------- */
+  const logs = VAN.$('#logs');
+  function fill(t) {
+    return t.replace(/%d/g, () => (Math.random() * 900 + 10 | 0))
+            .replace(/%n/g, () => (Math.random() * 100 | 0))
+            .replace(/%c/g, () => (Math.random() * 16 + 1 | 0))
+            .replace(/%z/g, () => (Math.random() * 6 + 1 | 0))
+            .replace(/%s/g, () => VAN.hex(6).toLowerCase().replace(/(..)(..)(..)/, '$1:$2:$3'));
+  }
+  function pushLog() {
+    const raw = fill(VAN.pick(LOGS));
+    const cls = /seal mismatch|suppressed|OPEN/.test(raw) ? 'w' : /Accepted|psql/.test(raw) ? 'g' : 't';
+    const d = VAN.el('div', cls);
+    d.textContent = VAN.stamp().slice(11) + '  ' + FICTION.subnet + '.' + (Math.random() * 250 + 2 | 0) + '  ' + raw;
+    logs.insertBefore(d, logs.firstChild);
+    while (logs.childNodes.length > 90) logs.removeChild(logs.lastChild);
+  }
+  setInterval(pushLog, 210);
+  for (let i = 0; i < 60; i++) pushLog();
+
+  /* ---------- packets ---------- */
+  const PROTO = ['TCP', 'TCP', 'TCP', 'UDP', 'TLSv1.3', 'RTSP', 'ARP', 'DNS', 'ICMP', 'MQTT'];
+  const pkts = VAN.$('#pkts');
+  let capN = 0, dropN = 0;
+  function pushPkt() {
+    capN++;
+    if (Math.random() < 0.02) dropN++;
+    const a = FICTION.subnet + '.' + (Math.random() * 250 + 2 | 0);
+    const b = Math.random() < .35 ? FICTION.cameraNet + '.' + (Math.random() * 30 + 10 | 0) : '203.0.113.' + (Math.random() * 200 + 2 | 0);
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="n">' + (capN).toLocaleString() + '</td>' +
+      '<td class="dim">' + (performance.now() / 1000).toFixed(6) + '</td>' +
+      '<td>' + a + '</td><td class="dim">→</td><td>' + b + '</td>' +
+      '<td class="' + (Math.random() < .12 ? 'warn' : 'dim') + '">' + VAN.pick(PROTO) + '</td>' +
+      '<td class="n">' + (54 + (Math.random() * 1400 | 0)) + '</td>';
+    pkts.insertBefore(tr, pkts.firstChild);
+    while (pkts.childNodes.length > 44) pkts.removeChild(pkts.lastChild);
+  }
+  setInterval(() => { for (let i = 0; i < 3; i++) pushPkt(); }, 90);
+  setInterval(() => {
+    VAN.$('#cap').textContent = capN.toLocaleString();
+    VAN.$('#drop').textContent = dropN.toLocaleString();
+    VAN.$('#pps').textContent = (28 + Math.random() * 14 | 0) + ' pps';
+    VAN.$('#s-store').textContent = (capN * 0.00042).toFixed(1) + ' MB';
+  }, 500);
+
+  /* ---------- sparklines ---------- */
+  const SPARKS = [
+    { k: 'THROUGHPUT', u: ' KB/s', lo: 20, hi: 120 },
+    { k: 'RETRANS', u: ' %', lo: 0, hi: 3 },
+    { k: 'RTT', u: ' ms', lo: 4, hi: 22 },
+    { k: 'DEAUTH', u: '', lo: 0, hi: 9 }
+  ];
+  VAN.$('#sparks').innerHTML = SPARKS.map((s, i) =>
+    '<div class="spark"><div class="lab">' + s.k + '</div><div class="num" id="sv' + i + '">—</div><canvas id="sc' + i + '"></canvas></div>').join('');
+  const sfits = SPARKS.map((s, i) => ({ s, fit: VAN.fit(VAN.$('#sc' + i)), hist: new Array(40).fill(0.5) }));
+  setInterval(() => sfits.forEach((o, i) => {
+    o.hist.shift(); o.hist.push(VAN.clamp(o.hist[o.hist.length - 1] + (Math.random() - .5) * .34, .05, 1));
+    const v = VAN.lerp(o.s.lo, o.s.hi, o.hist[o.hist.length - 1]);
+    VAN.$('#sv' + i).textContent = (o.s.hi > 10 ? v.toFixed(0) : v.toFixed(1)) + o.s.u;
+  }), 520);
+  VAN.loop(() => sfits.forEach(o => {
+    const w = o.fit.w, h = o.fit.h, g = o.fit.ctx;
+    if (!w) return;
+    g.clearRect(0, 0, w, h);
+    g.beginPath();
+    o.hist.forEach((v, i) => { const x = i / (o.hist.length - 1) * w, y = h - v * (h - 3) - 1.5; i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--hi').trim() || '#5cffb1';
+    g.lineWidth = 1.2; g.stroke();
+  }));
+
+  /* ---------- key material ---------- */
+  setInterval(() => {
+    const rows = [];
+    for (let i = 0; i < 9; i++) {
+      const h = VAN.hex(32).toLowerCase();
+      rows.push(i === 3 ? '<b>' + h + '</b>' : h);
+    }
+    VAN.$('#pool').innerHTML = rows.join(' ');
+  }, 700);
+})();
+</script>
+</body>
+</html>

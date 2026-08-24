@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en" data-theme="ice">
+<head>
+<meta charset="utf-8">
+<title>VAN OPS · GROUND TRACE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/augmented-ui.min.css">
+<link rel="stylesheet" href="../assets/core.css">
+<style>
+  .tr-stage { grid-template-columns: minmax(0,1fr) 300px; }
+  #map { width: 100%; height: 100%; display: block; }
+  .road { fill: none; stroke: var(--fg); stroke-width: 10; stroke-linecap: round; stroke-linejoin: round; opacity: .26; }
+  .road-c { fill: none; stroke: var(--fg); stroke-width: 1.4; stroke-dasharray: 12 14; stroke-linecap: butt; opacity: .55; }
+  .lane { fill: none; stroke: var(--fg); stroke-width: 6; opacity: .20; stroke-linecap: round; stroke-linejoin: round; }
+  .lane-e { fill: none; stroke: var(--fg); stroke-width: 1; opacity: .34; stroke-linecap: round; stroke-linejoin: round; }
+  .estate { fill: color-mix(in srgb, var(--hi) 3%, transparent); stroke: var(--line-hard); stroke-width: 1.2; stroke-dasharray: 7 5; }
+  .bldg { fill: color-mix(in srgb, var(--hi) 13%, transparent); stroke: var(--hi); stroke-width: 1.6; }
+  .bldg.out { fill: rgba(0,0,0,.35); stroke: var(--line-hard); stroke-width: 1.2; }
+  .wood { fill: var(--line); }
+  .water { fill: color-mix(in srgb, var(--accent) 8%, transparent); stroke: var(--accent); stroke-width: .8; opacity: .6; }
+  .maplbl { font: 400 8.5px 'JetBrains Mono', monospace; letter-spacing: .22em; fill: var(--dim);
+            paint-order: stroke; stroke: var(--bg); stroke-width: 3.5; stroke-linejoin: round; }
+  .grid-l { stroke: var(--grid); stroke-width: 1; }
+  .grid-t { font: 400 7.5px 'JetBrains Mono', monospace; fill: var(--dim); opacity: .7; }
+
+  .unit .body { stroke-width: 1.6; }
+  .unit .halo { fill: none; stroke-width: 1; opacity: .45; }
+  .unit .pulse { fill: none; stroke-width: 1; transform-origin: center; transform-box: fill-box; animation: uPulse 2.6s ease-out infinite; }
+  @keyframes uPulse { 0% { r: 8; opacity: .7 } 100% { r: 34; opacity: 0 } }
+  .unit .lbl { font: 500 9px 'JetBrains Mono', monospace; letter-spacing: .18em;
+               paint-order: stroke; stroke: var(--bg); stroke-width: 4; stroke-linejoin: round; }
+  .unit.sel .body { stroke-width: 3; }
+  .trail { fill: none; stroke-width: 1.4; stroke-dasharray: 3 4; opacity: .55; }
+
+  .reticle { fill: none; stroke: var(--hi); stroke-width: 1; opacity: .8; }
+  .reticle-t { font: 400 8px 'JetBrains Mono', monospace; fill: var(--hi); letter-spacing: .16em; }
+
+  .urow { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center;
+          font-size: 10.5px; padding: 5px 4px; cursor: pointer; border-bottom: 1px dotted var(--line); }
+  .urow:hover { background: rgba(111,216,255,.08); }
+  .urow.sel { background: rgba(111,216,255,.14); }
+  .urow .sw { width: 9px; height: 9px; border-radius: 50%; }
+  .urow .d { font-size: 9px; color: var(--dim); letter-spacing: .14em; }
+  .cdown { font-size: 30px; letter-spacing: .12em; color: var(--hi); text-shadow: var(--glow);
+           font-variant-numeric: tabular-nums; text-align: center; padding: 4px 0 2px; }
+</style>
+</head>
+<body>
+<div class="viewport">
+  <header class="topbar" data-augmented-ui="tl-clip br-clip border">
+    <span class="brand">GROUND<small> /TRACE</small></span>
+    <span class="sep"></span>
+    <span class="label">SHEET</span><span class="val">HALLOWELL · 1:2000</span>
+    <span class="sep"></span>
+    <span class="label">FIX</span><span class="ok">GNSS + DR · ± 3 M</span>
+    <span class="sep"></span>
+    <span class="label">UNITS</span><span class="val" id="nunits">—</span>
+    <span class="spacer"></span>
+    <div class="phasestrip" data-auto></div>
+    <span class="sep"></span>
+    <span class="hi tabular" data-van="clock">00:00:00</span>
+  </header>
+
+  <main class="stage tr-stage">
+    <section class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">SITE PLAN <span class="t-right" id="maplbl">GRID 51 QJ</span></h2>
+      <div class="panel-body flush"><svg id="map" viewBox="0 0 1000 660" preserveAspectRatio="xMidYMid meet"></svg></div>
+    </section>
+
+    <aside class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">UNITS</h2>
+      <div class="panel-body" style="padding:6px 10px">
+        <div id="ulist"></div>
+
+        <h2 class="panel-title" style="margin:14px -10px 6px;padding-left:10px">SELECTED</h2>
+        <div class="readout" id="udetail"></div>
+
+        <h2 class="panel-title" style="margin:14px -10px 6px;padding-left:10px">TRUCK 7742 ETA</h2>
+        <div class="cdown" id="cdown">03:41:00</div>
+        <p class="dim" style="font-size:10px;margin:0;line-height:1.5;text-align:center">
+          Booked for 06:00 pickup. Everything in that basement leaves with it.
+        </p>
+
+        <h2 class="panel-title" style="margin:14px -10px 6px;padding-left:10px">CONDITIONS</h2>
+        <div class="readout">
+          <dt>Moonrise</dt><dd>03:12 · 18 %</dd>
+          <dt>Wind</dt><dd id="c-wind">—</dd>
+          <dt>Ground</dt><dd>WET · SOFT</dd>
+          <dt>Sunrise</dt><dd class="warn">06:41</dd>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span>TRACKING <b class="hi" id="s-unit">RAVEN</b></span>
+    <span>POS <b class="tabular" id="s-pos">—</b></span>
+    <span>SEP <b id="s-sep">—</b></span>
+    <span>LINK <b class="ok">2.4 GHz MESH · 3 NODES</b></span>
+    <span class="spacer"></span>
+    <span class="dim">[TAB] NEXT UNIT · CLICK A MARKER · [1-5] PHASE · [?] KEYS</span>
+  </footer>
+</div>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/data.js"></script>
+<script>
+(function () {
+  'use strict';
+  const { FICTION } = VANDATA;
+  VAN.helpExtra = [['Tab', 'Cycle the tracked unit'], ['Click a marker', 'Lock the reticle to it']];
+  VAN.init({ name: 'TRACE', code: 'G-07' });
+
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const mk = (t, a) => { const e = document.createElementNS(SVGNS, t); for (const k in (a || {})) e.setAttribute(k, a[k]); return e; };
+  const map = VAN.$('#map');
+
+  /* ---------- static map ---------- */
+  const HOUSE = { x: 470, y: 250, w: 150, h: 96 };
+  function build() {
+    map.textContent = '';
+    // survey grid
+    const gg = mk('g');
+    for (let x = 0; x <= 1000; x += 100) {
+      gg.appendChild(mk('line', { x1: x, y1: 0, x2: x, y2: 660, class: 'grid-l' }));
+      const t = mk('text', { x: x + 3, y: 12, class: 'grid-t' }); t.textContent = (51000 + x / 10) | 0; gg.appendChild(t);
+    }
+    for (let y = 0; y <= 660; y += 100) gg.appendChild(mk('line', { x1: 0, y1: y, x2: 1000, y2: y, class: 'grid-l' }));
+    map.appendChild(gg);
+
+    // woodland stipple — deterministic so every take matches
+    const R = VAN.rng('woods'), wd = mk('g');
+    for (let i = 0; i < 460; i++) {
+      const x = R() * 1000, y = R() * 660;
+      const inEstate = x > 300 && x < 800 && y > 150 && y < 470;
+      const nearRoad = Math.abs(y - 590) < 40;
+      if (inEstate || nearRoad) continue;
+      wd.appendChild(mk('circle', { cx: x.toFixed(1), cy: y.toFixed(1), r: (1 + R() * 2.4).toFixed(1), class: 'wood' }));
+    }
+    map.appendChild(wd);
+
+    // lake
+    map.appendChild(mk('path', { class: 'water', d: 'M120 210 q60 -48 130 -20 q56 22 34 66 q-24 48 -96 42 q-78 -6 -68 -88 z' }));
+    const lt = mk('text', { x: 190, y: 262, class: 'maplbl', 'text-anchor': 'middle' }); lt.textContent = 'MILL POND'; map.appendChild(lt);
+
+    // estate boundary
+    map.appendChild(mk('rect', { x: 300, y: 150, width: 500, height: 320, class: 'estate' }));
+
+    // roads
+    map.appendChild(mk('path', { class: 'road', d: 'M0 592 L1000 578' }));
+    map.appendChild(mk('path', { class: 'road-c', d: 'M0 592 L1000 578' }));
+    const rt = mk('text', { x: 90, y: 578, class: 'maplbl' }); rt.textContent = 'HALLOWELL RD'; map.appendChild(rt);
+
+    // drive from the gate up to the house, plus the service spur
+    const DRIVE = 'M548 584 L548 500 Q548 452 588 430 L640 400 Q676 380 676 342 L676 300 L622 298';
+    const SPUR = 'M676 342 L742 342 Q772 342 772 312 L772 262 L620 262';
+    [DRIVE, SPUR].forEach(d => {
+      map.appendChild(mk('path', { class: 'lane', d }));
+      map.appendChild(mk('path', { class: 'lane-e', d }));
+    });
+    const dt = mk('text', { x: 700, y: 372, class: 'maplbl' }); dt.textContent = 'SERVICE SPUR'; map.appendChild(dt);
+
+    // gate + outbuildings
+    map.appendChild(mk('rect', { x: 536, y: 496, width: 24, height: 8, class: 'bldg out' }));
+    const gt = mk('text', { x: 566, y: 504, class: 'maplbl' }); gt.textContent = 'GATE'; map.appendChild(gt);
+    [[350, 190, 54, 34, 'STABLES'], [720, 190, 46, 30, 'GARAGE'], [340, 400, 40, 26, 'GLASSHOUSE']].forEach(([x, y, w, h, n]) => {
+      map.appendChild(mk('rect', { x, y, width: w, height: h, class: 'bldg out' }));
+      const t = mk('text', { x: x + w / 2, y: y - 5, class: 'maplbl', 'text-anchor': 'middle' }); t.textContent = n; map.appendChild(t);
+    });
+
+    // the house
+    map.appendChild(mk('rect', Object.assign({ class: 'bldg' }, { x: HOUSE.x, y: HOUSE.y, width: HOUSE.w, height: HOUSE.h })));
+    const ht = mk('text', { x: HOUSE.x + HOUSE.w / 2, y: HOUSE.y - 9, class: 'maplbl', 'text-anchor': 'middle',
+      style: 'fill:var(--hi);letter-spacing:.28em' });
+    ht.textContent = FICTION.estate; map.appendChild(ht);
+    // basement footprint under the house
+    map.appendChild(mk('rect', { x: HOUSE.x + 62, y: HOUSE.y + 30, width: 66, height: 52, fill: 'none',
+      stroke: 'var(--hi)', 'stroke-width': 1, 'stroke-dasharray': '3 3', opacity: .8 }));
+    const vt = mk('text', { x: HOUSE.x + 95, y: HOUSE.y + 60, class: 'maplbl', 'text-anchor': 'middle', style: 'fill:var(--hi)' });
+    vt.textContent = 'VAULT'; map.appendChild(vt);
+
+    map.appendChild(mk('g', { id: 'trails' }));
+    map.appendChild(mk('g', { id: 'units' }));
+
+    // reticle
+    const ret = mk('g', { id: 'reticle' });
+    const spin = mk('g', { id: 'retSpin' });
+    spin.appendChild(mk('circle', { r: 26, class: 'reticle' }));
+    [[-38, 0, -30, 0], [38, 0, 30, 0], [0, -38, 0, -30], [0, 38, 0, 30]].forEach(([x1, y1, x2, y2]) =>
+      spin.appendChild(mk('line', { x1, y1, x2, y2, class: 'reticle' })));
+    ret.appendChild(spin);
+    const rl = mk('text', { x: 0, y: 46, class: 'reticle-t', 'text-anchor': 'middle', id: 'retLbl' });
+    ret.appendChild(rl);
+    map.appendChild(ret);
+
+    // scale bar
+    const sb = mk('g', { transform: 'translate(40,636)' });
+    sb.appendChild(mk('line', { x1: 0, y1: 0, x2: 100, y2: 0, stroke: 'var(--line-hard)', 'stroke-width': 1 }));
+    [0, 50, 100].forEach(x => sb.appendChild(mk('line', { x1: x, y1: -4, x2: x, y2: 4, stroke: 'var(--line-hard)', 'stroke-width': 1 })));
+    const st = mk('text', { x: 108, y: 3, class: 'maplbl' }); st.textContent = '100 M'; sb.appendChild(st);
+    map.appendChild(sb);
+  }
+
+  /* ---------- units ---------- */
+  const UNITS = [
+    { id: 'VAN', name: FICTION.handle, col: 'var(--hi)', kind: 'static', x: 262, y: 596,
+      note: FICTION.van, path: null },
+    { id: 'RAVEN', name: FICTION.partner, col: 'var(--accent)', kind: 'walk',
+      path: [[548, 584], [548, 500], [560, 452], [604, 424], [648, 398], [676, 356], [676, 300], [622, 298], [560, 296]],
+      speed: 0.042, note: 'ON FOOT · COMMS OPEN' },
+    { id: 'PATROL', name: 'GUARD 2', col: 'var(--warn)', kind: 'walk',
+      path: [[340, 190], [470, 176], [640, 176], [772, 196], [772, 300], [772, 420], [620, 448], [430, 440], [340, 400], [340, 190]],
+      speed: 0.026, note: 'FOOT PATROL · 22 MIN LOOP' },
+    { id: 'CAR-1', name: 'ESTATE CAR', col: 'var(--warn)', kind: 'drive',
+      path: [[1000, 578], [700, 584], [548, 584], [548, 500], [640, 400], [676, 300]],
+      speed: 0.018, note: 'RETURNING · OWNER ABOARD', startAt: 3 },
+    { id: 'TRUCK', name: 'TRUCK 7742', col: 'var(--alarm)', kind: 'drive',
+      path: [[0, 592], [300, 588], [548, 584], [548, 500], [640, 400], [676, 342], [742, 342], [772, 300]],
+      speed: 0.020, note: 'BOOKED 06:00 · NOT YET MOVING', startAt: 4 }
+  ];
+  let sel = 1, t = 0;
+
+  function alongPath(pts, u) {
+    if (!pts || pts.length < 2) return [pts ? pts[0][0] : 0, pts ? pts[0][1] : 0, 0];
+    const segs = []; let total = 0;
+    for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); segs.push(d); total += d; }
+    let want = VAN.clamp(u, 0, 1) * total, i = 0;
+    while (i < segs.length && want > segs[i]) { want -= segs[i]; i++; }
+    if (i >= segs.length) i = segs.length - 1;
+    const f = segs[i] ? want / segs[i] : 1;
+    const ang = Math.atan2(pts[i + 1][1] - pts[i][1], pts[i + 1][0] - pts[i][0]);
+    return [VAN.lerp(pts[i][0], pts[i + 1][0], f), VAN.lerp(pts[i][1], pts[i + 1][1], f), ang];
+  }
+
+  function buildUnits() {
+    const host = VAN.$('#units'), trails = VAN.$('#trails');
+    host.textContent = ''; trails.textContent = '';
+    UNITS.forEach((u, i) => {
+      if (u.path) trails.appendChild(mk('polyline', {
+        class: 'trail', stroke: u.col, 'data-i': i, points: u.path.map(p => p.join(',')).join(' ')
+      }));
+      const g = mk('g', { class: 'unit', 'data-i': i });
+      g.appendChild(mk('circle', { class: 'pulse', r: 8, stroke: u.col }));
+      g.appendChild(mk('circle', { class: 'halo', r: 11, stroke: u.col }));
+      if (u.kind === 'drive') {
+        g.appendChild(mk('rect', { class: 'body', x: -6, y: -4, width: 12, height: 8, fill: 'rgba(3,7,12,.9)', stroke: u.col }));
+      } else if (u.kind === 'static') {
+        g.appendChild(mk('rect', { class: 'body', x: -7, y: -5, width: 14, height: 10, fill: 'rgba(3,7,12,.9)', stroke: u.col }));
+      } else {
+        g.appendChild(mk('circle', { class: 'body', r: 5, fill: 'rgba(3,7,12,.9)', stroke: u.col }));
+      }
+      const l = mk('text', { class: 'lbl', x: 15, y: 4, fill: u.col }); l.textContent = u.id;
+      g.appendChild(l);
+      g.addEventListener('click', () => { sel = i; paintList(); });
+      host.appendChild(g);
+    });
+  }
+
+  function paintList() {
+    VAN.$('#ulist').innerHTML = UNITS.map((u, i) => {
+      const active = u.startAt == null || VAN.state.phase >= u.startAt;
+      return '<div class="urow' + (i === sel ? ' sel' : '') + '" data-i="' + i + '">' +
+        '<span class="sw" style="background:' + (active ? u.col : 'var(--dim)') + '"></span>' +
+        '<span>' + u.id + '<br><span class="d">' + u.name + '</span></span>' +
+        '<span class="d" style="color:' + (active ? u.col : 'var(--dim)') + '">' + (active ? 'TRACKING' : 'DORMANT') + '</span></div>';
+    }).join('');
+    VAN.$$('#ulist .urow').forEach(r => r.addEventListener('click', () => { sel = +r.dataset.i; paintList(); }));
+    VAN.$('#s-unit').textContent = UNITS[sel].id;
+    VAN.$('#nunits').textContent = UNITS.filter(u => u.startAt == null || VAN.state.phase >= u.startAt).length + '/' + UNITS.length;
+  }
+
+  /* ---------- animation ---------- */
+  VAN.loop(dt => {
+    t += dt;
+    const pos = [];
+    UNITS.forEach((u, i) => {
+      const g = VAN.$$('.unit', map)[i];
+      const active = u.startAt == null || VAN.state.phase >= u.startAt;
+      let p;
+      if (u.kind === 'static') p = [u.x, u.y, 0];
+      else {
+        // RAVEN advances with the phase; everyone else just loops
+        const u2 = u.id === 'RAVEN'
+          ? VAN.clamp(VAN.state.phase / 4 + (t * 0.004) % 0.05, 0, 1)
+          : (t * u.speed) % 1;
+        p = alongPath(u.path, u2);
+      }
+      pos.push(p);
+      g.setAttribute('transform', 'translate(' + p[0].toFixed(1) + ',' + p[1].toFixed(1) + ')');
+      g.style.opacity = active ? 1 : 0.22;
+      const tr = VAN.$('#trails').querySelector('[data-i="' + i + '"]');
+      if (tr) tr.style.opacity = active ? '' : '0';
+      g.classList.toggle('sel', i === sel);
+    });
+
+    const s = pos[sel];
+    VAN.$('#reticle').setAttribute('transform', 'translate(' + s[0].toFixed(1) + ',' + s[1].toFixed(1) + ')');
+    VAN.$('#retSpin').setAttribute('transform', 'rotate(' + (t * 22 % 360).toFixed(1) + ')');
+    VAN.$('#retLbl').textContent = 'TRACKING ' + UNITS[sel].id;
+
+    const lat = 41.01840 + (330 - s[1]) * 0.0000094;
+    const lon = -73.76490 + (s[0] - 500) * 0.0000121;
+    VAN.$('#s-pos').textContent = lat.toFixed(5) + ' N  ' + Math.abs(lon).toFixed(5) + ' W';
+    const dx = s[0] - HOUSE.x - HOUSE.w / 2, dy = s[1] - HOUSE.y - HOUSE.h / 2;
+    VAN.$('#s-sep').textContent = (Math.hypot(dx, dy) * 0.62).toFixed(0) + ' M FROM HOUSE';
+
+    VAN.$('#udetail').innerHTML = [
+      ['Callsign', UNITS[sel].name], ['Mode', UNITS[sel].kind.toUpperCase()],
+      ['Note', UNITS[sel].note], ['Bearing', ((s[2] * 180 / Math.PI + 450) % 360).toFixed(0) + '°'],
+      ['Speed', UNITS[sel].kind === 'static' ? '0.0 m/s' : (UNITS[sel].kind === 'drive' ? (7 + Math.sin(t) * 2).toFixed(1) : (1.3 + Math.sin(t * 2) * 0.3).toFixed(1)) + ' m/s'],
+      ['Fix age', (Math.random() * 2).toFixed(1) + ' s']
+    ].map(([k, v]) => '<dt>' + k + '</dt><dd>' + v + '</dd>').join('');
+  });
+
+  /* countdown to the 06:00 pickup */
+  let secs = 3 * 3600 + 41 * 60;
+  setInterval(() => {
+    secs = Math.max(0, secs - 1);
+    const h = (secs / 3600) | 0, m = ((secs % 3600) / 60) | 0, s2 = secs % 60;
+    VAN.$('#cdown').textContent = VAN.pad(h, 2) + ':' + VAN.pad(m, 2) + ':' + VAN.pad(s2, 2);
+    VAN.$('#c-wind').textContent = (4 + Math.random() * 3).toFixed(0) + ' KT SW';
+  }, 1000);
+
+  VAN.keys({ Tab: () => { sel = (sel + 1) % UNITS.length; paintList(); } });
+  VAN.on('phase', paintList);
+
+  build(); buildUnits(); paintList();
+  VAN.on('theme', () => setTimeout(() => { build(); buildUnits(); }, 30));
+})();
+</script>
+</body>
+</html>

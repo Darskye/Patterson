@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="en" data-theme="phosphor">
+<head>
+<meta charset="utf-8">
+<title>VAN OPS · CAMERA WALL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/augmented-ui.min.css">
+<link rel="stylesheet" href="../assets/core.css">
+<style>
+  .cam-stage { grid-template-columns: minmax(0,1fr) 252px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 8px; min-height: 0; }
+  .tile {
+    position: relative; overflow: hidden; cursor: pointer; background: #010304;
+    border: 1px solid var(--line); min-height: 0;
+    transition: border-color .18s;
+  }
+  .tile:hover { border-color: var(--line-hard); }
+  .tile.sel { border-color: var(--hi); box-shadow: 0 0 0 1px var(--hi), 0 0 22px rgba(92,255,177,.16); }
+  .tile canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .grid.zoom .tile { display: none; }
+  .grid.zoom .tile.sel { display: block; grid-area: 1 / 1 / 4 / 4; }
+
+  /* on-screen display baked over the feed */
+  .osd { position: absolute; inset: 0; pointer-events: none; font-size: 10px; letter-spacing: .12em; }
+  .osd .tl { position: absolute; top: 6px; left: 8px; color: #cfe9df; text-shadow: 0 1px 3px #000; }
+  .osd .tr { position: absolute; top: 6px; right: 8px; color: #cfe9df; text-shadow: 0 1px 3px #000; display: flex; align-items: center; gap: 6px; }
+  .osd .bl { position: absolute; bottom: 6px; left: 8px; color: #9fb8b0; text-shadow: 0 1px 3px #000; font-size: 9.5px; }
+  .osd .br { position: absolute; bottom: 6px; right: 8px; color: #9fb8b0; text-shadow: 0 1px 3px #000; font-size: 9.5px; font-variant-numeric: tabular-nums; }
+  .osd .rec { color: #ff4d4d; font-weight: 700; }
+  .osd .rec i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ff4d4d; margin-right: 4px; vertical-align: -1px; animation: recBlink 1.4s steps(2) infinite; }
+  @keyframes recBlink { 50% { opacity: .15; } }
+  .osd .bars { display: inline-flex; gap: 1.5px; align-items: flex-end; height: 9px; }
+  .osd .bars i { width: 2.5px; background: #cfe9df; opacity: .35; }
+  .osd .bars i.on { opacity: 1; }
+  .tile .cross { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%,-50%); opacity: .22; }
+  .tile .cross::before, .tile .cross::after { content: ''; position: absolute; background: #cfe9df; }
+  .tile .cross::before { left: 50%; top: 0; width: 1px; height: 100%; }
+  .tile .cross::after { top: 50%; left: 0; height: 1px; width: 100%; }
+
+  .badge-loop {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    padding: 5px 14px; font-size: 10px; letter-spacing: .3em; color: #04070a; background: var(--warn);
+    box-shadow: 0 0 30px rgba(255,180,84,.5); animation: recBlink 1.6s steps(2) infinite; display: none;
+  }
+  .tile[data-mode="LOOP"] .badge-loop { display: block; }
+  .tile[data-mode="LOOP"] { border-color: var(--warn); }
+  .tile[data-mode="DOWN"] { border-color: var(--alarm); }
+
+  /* right rail */
+  .chan { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: center;
+          padding: 4px 6px; font-size: 10.5px; cursor: pointer; border-bottom: 1px dotted var(--line); }
+  .chan:hover { background: rgba(92,255,177,.07); }
+  .chan.sel { background: rgba(92,255,177,.12); color: var(--hi); }
+  .chan .k { color: var(--dim); font-size: 9.5px; }
+  .chan .st { font-size: 9px; letter-spacing: .16em; }
+  .chan .st.LIVE { color: var(--ok); } .chan .st.LOOP { color: var(--warn); } .chan .st.DOWN { color: var(--alarm); }
+  .buf { display: flex; gap: 1.5px; height: 26px; align-items: flex-end; margin-top: 6px; }
+  .buf i { flex: 1; background: var(--line-hard); }
+</style>
+</head>
+<body>
+<div class="viewport">
+
+  <header class="topbar" data-augmented-ui="tl-clip br-clip border">
+    <span class="brand">ARGUS<small> /NVR-16</small></span>
+    <span class="sep"></span>
+    <span class="label">HOST</span><span class="val" id="host">10.42.9.10</span>
+    <span class="sep"></span>
+    <span class="label">SESSION</span><span class="val">admin · 0x<span id="sess">—</span></span>
+    <span class="sep"></span>
+    <span class="label">CHANNELS</span><span class="hi"><span id="nlive">9</span>/9 LIVE</span>
+    <span class="spacer"></span>
+    <div class="phasestrip" data-auto></div>
+    <span class="sep"></span>
+    <span class="hi tabular" data-van="clock">00:00:00</span>
+  </header>
+
+  <main class="stage cam-stage">
+    <div class="grid" id="grid"></div>
+
+    <aside class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">CHANNELS <span class="t-right">16CH</span></h2>
+      <div class="panel-body" style="padding:6px 8px">
+        <div id="chans"></div>
+
+        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">LOOP INJECTION</h2>
+        <p class="dim" style="font-size:10px;line-height:1.55;margin:0 0 8px">
+          Substitutes a 40 s clean plate on the selected channel. Head-end keeps logging
+          continuous video. Guard sees nothing.
+        </p>
+        <div class="btn-row">
+          <button class="btn" id="b-loop" data-augmented-ui="tl-clip br-clip border">INJECT [L]</button>
+          <button class="btn danger" id="b-live" data-augmented-ui="tl-clip br-clip border">RESTORE [K]</button>
+        </div>
+
+        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">PLATE BUFFER</h2>
+        <div class="readout">
+          <dt>Captured</dt><dd id="ro-cap">00:40</dd>
+          <dt>Bitrate</dt><dd id="ro-br">—</dd>
+          <dt>Encoder</dt><dd>H.264 · CBR</dd>
+          <dt>Drift</dt><dd id="ro-drift">—</dd>
+        </div>
+        <div class="buf" id="buf"></div>
+
+        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">HEAD-END</h2>
+        <div class="readout">
+          <dt>Firmware</dt><dd>4.1.2-argus</dd>
+          <dt>Retention</dt><dd>31 d</dd>
+          <dt>Disk</dt><dd id="ro-disk">—</dd>
+          <dt>Op. temp</dt><dd id="ro-temp">—</dd>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span>NVR <b class="ok">AUTHENTICATED</b></span>
+    <span>SELECTED <b id="s-sel">CAM-01</b></span>
+    <span>LOOPED <b id="s-loop" class="warn">0</b></span>
+    <span>PLATE <b id="s-plate">READY</b></span>
+    <span class="spacer"></span>
+    <span class="dim">[Q..O] LOOP CHANNEL · [L] LOOP ALL · [K] RESTORE · [ENTER] ZOOM · [?] KEYS</span>
+  </footer>
+</div>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/data.js"></script>
+<script>
+(function () {
+  'use strict';
+  const { CAMERAS, FICTION } = VANDATA;
+  const KEYS = ['q','w','e','r','t','y','u','i','o'];
+  VAN.helpExtra = [
+    ['Q W E R T Y U I O', 'Loop-inject channels 1 through 9'],
+    ['L / K', 'Loop every channel / restore every channel'],
+    ['Enter', 'Zoom the selected channel to full frame'],
+    ['Click a feed', 'Select it · click again to zoom']
+  ];
+  VAN.init({ name: 'CAMERAS', code: 'C-01' });
+  VAN.$('#sess').textContent = VAN.hex(8);
+
+  /* ---------- pre-rendered sensor noise (blitted, never per-pixel per frame) ---------- */
+  const NOISE = [];
+  for (let n = 0; n < 6; n++) {
+    const c = document.createElement('canvas'); c.width = 160; c.height = 90;
+    const x = c.getContext('2d'), img = x.createImageData(160, 90), R = VAN.rng(1000 + n);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const v = 90 + R() * 165;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+      img.data[i + 3] = 255;
+    }
+    x.putImageData(img, 0, 0);
+    NOISE.push(c);
+  }
+
+  /* ---------- scene definitions ---------- */
+  // props: [x, y, w, h, kind]  in normalised feed space (0..1)
+  const SCENES = {
+    gate:     { ir: true,  hz: .52, tone: [26, 40, 36], props: [[.05,.28,.10,.44,'post'],[.85,.28,.10,.44,'post'],[.15,.40,.70,.30,'gate'],[.30,.16,.40,.10,'arch'],[.00,.70,1,.30,'road']], walk: [[-.1,.80],[1.1,.80]], lamp: [.5,.13] },
+    drive:    { ir: true,  hz: .46, tone: [24, 38, 34], props: [[.00,.55,.28,.45,'hedge'],[.72,.55,.28,.45,'hedge'],[.30,.46,.40,.54,'road'],[.38,.30,.24,.16,'house']], walk: [[.5,.52],[.42,1.05]], lamp: [.2,.30] },
+    foyer:    { ir: false, hz: .42, tone: [38, 50, 50], props: [[.10,.30,.14,.48,'column'],[.76,.30,.14,.48,'column'],[.40,.34,.20,.22,'door'],[.30,.70,.40,.10,'rug'],[.66,.46,.08,.24,'plinth']], walk: [[.15,.86],[.85,.72]], lamp: [.5,.16] },
+    gallery:  { ir: false, hz: .40, tone: [34, 46, 46], props: [[.06,.30,.13,.30,'frame'],[.24,.28,.13,.32,'frame'],[.63,.28,.13,.32,'frame'],[.81,.30,.13,.30,'frame'],[.44,.48,.12,.28,'plinth'],[.30,.52,.09,.22,'plinth']], walk: [[1.1,.80],[-.1,.86]], lamp: [.5,.12] },
+    corridor: { ir: false, hz: .44, tone: [30, 42, 42], props: [[.00,.20,.20,.66,'wall'],[.80,.20,.20,.66,'wall'],[.42,.34,.16,.34,'door'],[.20,.74,.60,.26,'floor']], walk: [[.50,.44],[.50,1.05]], lamp: [.5,.10] },
+    stair:    { ir: false, hz: .38, tone: [34, 46, 46], props: [[.28,.36,.44,.50,'stairs'],[.10,.24,.12,.40,'rail'],[.78,.24,.12,.40,'rail'],[.40,.14,.20,.14,'window']], walk: [[.34,.92],[.62,.50]], lamp: [.5,.10] },
+    cellar:   { ir: true,  hz: .40, tone: [22, 34, 30], props: [[.04,.26,.24,.56,'rack'],[.72,.26,.24,.56,'rack'],[.34,.30,.32,.40,'arch'],[.20,.78,.60,.22,'floor']], walk: [[.50,1.05],[.50,.48]], lamp: [.5,.22] },
+    vault:    { ir: true,  hz: .42, tone: [22, 36, 32], props: [[.30,.24,.40,.52,'vaultdoor'],[.04,.44,.18,.34,'crate'],[.78,.46,.18,.32,'crate'],[.10,.80,.80,.20,'floor']], walk: [[-.1,.88],[.44,.72]], lamp: [.5,.16] },
+    lawn:     { ir: true,  hz: .50, tone: [24, 38, 32], props: [[.00,.50,1,.16,'hedge'],[.10,.32,.20,.20,'tree'],[.70,.30,.22,.22,'tree'],[.00,.66,1,.34,'grass']], walk: [[1.1,.86],[-.1,.80]], lamp: [.86,.24] }
+  };
+
+  /* ---------- feed renderer ---------- */
+  function makeFeed(canvas, cam, idx) {
+    const S = SCENES[cam.scene];
+    const R = VAN.rng(cam.id);
+    const fit = VAN.fit(canvas);
+    let glitchUntil = 0, frozenAt = 0, lastMode = 'LIVE';
+    const walkPhase = R() * 10, walkSpeed = 0.055 + R() * 0.035;
+    const shakeSeed = R() * 100;
+
+    function paintScene(g, w, h, t) {
+      const [r0, g0, b0] = S.tone;
+      // sky / far wall gradient
+      const grad = g.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, 'rgb(' + (r0 - 6) + ',' + (g0 - 6) + ',' + (b0 - 6) + ')');
+      grad.addColorStop(S.hz, 'rgb(' + (r0 + 8) + ',' + (g0 + 10) + ',' + (b0 + 9) + ')');
+      grad.addColorStop(1, 'rgb(' + (r0 - 8) + ',' + (g0 - 6) + ',' + (b0 - 6) + ')');
+      g.fillStyle = grad; g.fillRect(0, 0, w, h);
+
+      // one-point perspective floor
+      const hz = h * S.hz, vx = w * 0.5;
+      g.strokeStyle = 'rgba(200,235,222,.13)'; g.lineWidth = 1;
+      for (let i = -6; i <= 6; i++) {
+        g.beginPath(); g.moveTo(vx + i * w * 0.055, hz); g.lineTo(vx + i * w * 0.42, h); g.stroke();
+      }
+      for (let i = 1; i < 9; i++) {
+        const y = hz + (h - hz) * Math.pow(i / 9, 2.1);
+        g.globalAlpha = 1 - i / 11;
+        g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+      }
+      g.globalAlpha = 1;
+      // wall / floor junction reads the depth instantly on camera
+      g.strokeStyle = 'rgba(210,245,232,.30)'; g.lineWidth = 1.4;
+      g.beginPath(); g.moveTo(0, hz); g.lineTo(w, hz); g.stroke();
+      // ceiling falls off
+      const cg = g.createLinearGradient(0, 0, 0, hz);
+      cg.addColorStop(0, 'rgba(0,0,0,.42)'); cg.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = cg; g.fillRect(0, 0, w, hz);
+
+      // light pool
+      const lp = g.createRadialGradient(w * S.lamp[0], h * S.lamp[1], 2, w * S.lamp[0], h * S.lamp[1], h * 0.95);
+      lp.addColorStop(0, 'rgba(220,250,240,.30)');
+      lp.addColorStop(.45, 'rgba(195,232,220,.09)');
+      lp.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = lp; g.fillRect(0, 0, w, h);
+
+      // props as silhouettes with a rim
+      S.props.forEach((p, i) => {
+        const x = p[0] * w, y = p[1] * h, pw = p[2] * w, ph = p[3] * h, kind = p[4];
+        g.fillStyle = 'rgba(4,9,11,.80)';
+        g.strokeStyle = 'rgba(205,240,228,.30)';
+        g.lineWidth = 1;
+        if (kind === 'tree') {
+          g.beginPath(); g.ellipse(x + pw / 2, y + ph / 2, pw / 2, ph / 2, 0, 0, 7); g.fill(); g.stroke();
+        } else if (kind === 'stairs') {
+          for (let s = 0; s < 8; s++) {
+            const sy = y + ph * s / 8, sh = ph / 8;
+            const inset = pw * 0.045 * s;
+            g.fillStyle = 'rgba(6,12,14,' + (0.30 + s * 0.055) + ')';
+            g.fillRect(x + inset, sy, pw - inset * 2, sh);
+            g.strokeStyle = 'rgba(200,235,225,.11)';
+            g.beginPath(); g.moveTo(x + inset, sy); g.lineTo(x + pw - inset, sy); g.stroke();
+          }
+        } else if (kind === 'frame') {
+          g.fillStyle = 'rgba(12,22,24,.88)'; g.fillRect(x, y, pw, ph);
+          g.strokeStyle = 'rgba(215,245,235,.46)'; g.lineWidth = 1.6; g.strokeRect(x, y, pw, ph);
+          // canvas inside the frame catches the picture light
+          const fg2 = g.createLinearGradient(x, y, x + pw, y + ph);
+          fg2.addColorStop(0, 'rgba(190,225,215,.13)'); fg2.addColorStop(1, 'rgba(190,225,215,.03)');
+          g.fillStyle = fg2; g.fillRect(x + 5, y + 5, pw - 10, ph - 10);
+          g.strokeStyle = 'rgba(215,245,235,.16)'; g.lineWidth = 1; g.strokeRect(x + 5, y + 5, pw - 10, ph - 10);
+        } else if (kind === 'vaultdoor') {
+          g.fillStyle = 'rgba(10,19,21,.92)'; g.fillRect(x, y, pw, ph);
+          g.strokeStyle = 'rgba(215,245,235,.44)'; g.lineWidth = 1.6; g.strokeRect(x, y, pw, ph);
+          const ccx = x + pw * .5, ccy = y + ph * .5, rr = Math.min(pw, ph) * .26;
+          g.lineWidth = 1.2; g.strokeStyle = 'rgba(215,245,235,.32)';
+          g.beginPath(); g.arc(ccx, ccy, rr, 0, 7); g.stroke();
+          g.beginPath(); g.arc(ccx, ccy, rr * .40, 0, 7); g.stroke();
+          for (let k = 0; k < 6; k++) {                        // handwheel spokes
+            const an = k * Math.PI / 3 + t * 0.05;
+            g.beginPath(); g.moveTo(ccx + Math.cos(an) * rr * .4, ccy + Math.sin(an) * rr * .4);
+            g.lineTo(ccx + Math.cos(an) * rr, ccy + Math.sin(an) * rr); g.stroke();
+          }
+          g.strokeStyle = 'rgba(215,245,235,.14)';
+          g.beginPath(); g.moveTo(x + pw * .5, y); g.lineTo(x + pw * .5, y + ph); g.stroke();
+        } else if (kind === 'rack') {                        // wine bottles catch the IR
+          g.fillStyle = 'rgba(4,9,11,.86)'; g.fillRect(x, y, pw, ph);
+          g.strokeStyle = 'rgba(205,240,228,.30)'; g.strokeRect(x, y, pw, ph);
+          g.strokeStyle = 'rgba(205,240,228,.15)';
+          for (let c = 1; c < 5; c++) { g.beginPath(); g.moveTo(x + pw * c / 5, y); g.lineTo(x + pw * c / 5, y + ph); g.stroke(); }
+          for (let rr2 = 1; rr2 < 7; rr2++) { g.beginPath(); g.moveTo(x, y + ph * rr2 / 7); g.lineTo(x + pw, y + ph * rr2 / 7); g.stroke(); }
+        } else if (kind === 'grass' || kind === 'road' || kind === 'floor' || kind === 'rug') {
+          g.fillStyle = 'rgba(4,9,10,.30)'; g.fillRect(x, y, pw, ph);
+          g.strokeStyle = 'rgba(205,240,228,.16)'; g.lineWidth = 1;
+          g.beginPath(); g.moveTo(x, y); g.lineTo(x + pw, y); g.stroke();
+        } else {
+          g.fillRect(x, y, pw, ph);
+          g.strokeRect(x, y, pw, ph);
+        }
+      });
+
+      // patrolling figure
+      const wt = (t * walkSpeed + walkPhase) % 3;
+      if (wt < 1) {
+        const f = VAN.easeInOut(wt);
+        const fx = VAN.lerp(S.walk[0][0], S.walk[1][0], f) * w;
+        const fy = VAN.lerp(S.walk[0][1], S.walk[1][1], f) * h;
+        const scale = (fy / h) * 0.9 + 0.25;
+        const fh = h * 0.34 * scale;
+        g.fillStyle = 'rgba(2,5,6,.88)';
+        g.beginPath();
+        g.ellipse(fx, fy - fh * 0.90, fh * 0.115, fh * 0.13, 0, 0, 7); g.fill();      // head
+        g.beginPath();
+        g.moveTo(fx - fh * 0.15, fy);
+        g.lineTo(fx - fh * 0.14, fy - fh * 0.72);
+        g.lineTo(fx + fh * 0.14, fy - fh * 0.72);
+        g.lineTo(fx + fh * 0.15, fy);
+        g.closePath(); g.fill();
+        // legs swing
+        const sw = Math.sin(t * 7 + walkPhase) * fh * 0.10;
+        g.lineWidth = fh * 0.07; g.strokeStyle = 'rgba(2,5,6,.88)';
+        g.beginPath(); g.moveTo(fx, fy - fh * 0.05); g.lineTo(fx + sw, fy + fh * 0.16); g.stroke();
+        g.beginPath(); g.moveTo(fx, fy - fh * 0.05); g.lineTo(fx - sw, fy + fh * 0.16); g.stroke();
+      }
+    }
+
+    function draw(t) {
+      const w = fit.w, h = fit.h, g = fit.ctx;
+      if (!w || !h) return;
+      const mode = VAN.state.cams[cam.id] || 'LIVE';
+      if (mode !== lastMode) { glitchUntil = t + 0.42; if (mode === 'LOOP') frozenAt = t; lastMode = mode; }
+
+      g.save();
+      // IP cameras never sit perfectly still
+      const jx = Math.sin(t * 0.7 + shakeSeed) * 0.9, jy = Math.cos(t * 0.53 + shakeSeed) * 0.7;
+      g.translate(jx, jy);
+
+      // a looped feed replays a 6 s window forever
+      const st = mode === 'LOOP' ? frozenAt - 6 + ((t - frozenAt) % 6) : t;
+      if (mode === 'DOWN') { g.fillStyle = '#05080a'; g.fillRect(-4, -4, w + 8, h + 8); }
+      else paintScene(g, w, h, st);
+      g.restore();
+
+      // sensor noise
+      g.globalAlpha = mode === 'DOWN' ? 0.55 : (S.ir ? 0.13 : 0.085);
+      g.globalCompositeOperation = 'lighter';
+      g.drawImage(NOISE[(t * 24 | 0) % NOISE.length], 0, 0, w, h);
+      g.globalCompositeOperation = 'source-over';
+      g.globalAlpha = 1;
+
+      // IR tint
+      if (S.ir && mode !== 'DOWN') {
+        const ir = g.createRadialGradient(w / 2, h * .55, 2, w / 2, h * .55, w * .70);
+        ir.addColorStop(0, 'rgba(150,225,205,.11)');
+        ir.addColorStop(1, 'rgba(120,190,170,0)');
+        g.fillStyle = ir; g.fillRect(0, 0, w, h);
+      }
+
+      // block-compression glitch
+      if (t < glitchUntil || R() < 0.0022) {
+        const n = 2 + (R() * 4 | 0);
+        for (let i = 0; i < n; i++) {
+          const bh = 4 + R() * 26, by = R() * h, dx = (R() - 0.5) * 44;
+          g.drawImage(canvas, 0, by * (canvas.height / h), canvas.width, bh * (canvas.height / h),
+                      dx, by, w, bh);
+        }
+        g.fillStyle = 'rgba(120,255,200,.05)'; g.fillRect(0, R() * h, w, 2 + R() * 8);
+      }
+
+      // scanlines + vignette
+      g.fillStyle = 'rgba(0,0,0,.20)';
+      for (let y = 0; y < h; y += 3) g.fillRect(0, y, w, 1);
+      const vg = g.createRadialGradient(w / 2, h / 2, h * 0.25, w / 2, h / 2, h * 0.85);
+      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.46)');
+      g.fillStyle = vg; g.fillRect(0, 0, w, h);
+    }
+    return { draw };
+  }
+
+  /* ---------- build the wall ---------- */
+  const grid = VAN.$('#grid');
+  const feeds = [];
+  CAMERAS.forEach((cam, i) => {
+    const tile = VAN.el('div', 'tile');
+    tile.dataset.id = cam.id;
+    tile.dataset.mode = 'LIVE';
+    const cv = document.createElement('canvas');
+    tile.appendChild(cv);
+    tile.insertAdjacentHTML('beforeend',
+      '<div class="cross"></div>' +
+      '<div class="osd">' +
+        '<div class="tl">' + cam.id + '  ' + cam.name + '</div>' +
+        '<div class="tr"><span class="bars"><i class="on" style="height:3px"></i><i class="on" style="height:5px"></i><i class="on" style="height:7px"></i><i style="height:9px"></i></span>' +
+          '<span class="rec"><i></i>REC</span></div>' +
+        '<div class="bl">' + FICTION.cameraNet + cam.ip + ' · ' + cam.floor + ' · 2.8MM</div>' +
+        '<div class="br" data-ts>—</div>' +
+      '</div>' +
+      '<div class="badge-loop">● LOOP INJECTED</div>');
+    tile.addEventListener('click', () => {
+      if (sel === i) grid.classList.toggle('zoom');
+      else { select(i); grid.classList.remove('zoom'); }
+    });
+    grid.appendChild(tile);
+    feeds.push({ cam, tile, feed: makeFeed(cv, cam, i), ts: tile.querySelector('[data-ts]') });
+  });
+
+  let sel = 0;
+  function select(i) {
+    sel = ((i % feeds.length) + feeds.length) % feeds.length;
+    feeds.forEach((f, n) => f.tile.classList.toggle('sel', n === sel));
+    VAN.$('#s-sel').textContent = feeds[sel].cam.id;
+    renderChans();
+  }
+
+  /* ---------- channel rail ---------- */
+  function renderChans() {
+    VAN.$('#chans').innerHTML = feeds.map((f, i) => {
+      const m = VAN.state.cams[f.cam.id] || 'LIVE';
+      return '<div class="chan' + (i === sel ? ' sel' : '') + '" data-i="' + i + '">' +
+        '<span class="k">' + KEYS[i].toUpperCase() + '</span>' +
+        '<span>' + f.cam.id + ' <span class="dim">' + f.cam.name + '</span></span>' +
+        '<span class="st ' + m + '">' + m + '</span></div>';
+    }).join('');
+    VAN.$$('#chans .chan').forEach(c => c.addEventListener('click', () => select(+c.dataset.i)));
+    const looped = feeds.filter(f => VAN.state.cams[f.cam.id] === 'LOOP').length;
+    VAN.$('#s-loop').textContent = looped;
+    VAN.$('#nlive').textContent = feeds.length - looped;
+    feeds.forEach(f => f.tile.dataset.mode = VAN.state.cams[f.cam.id] || 'LIVE');
+  }
+
+  function setMode(i, mode) { VAN.cue('cam', { id: feeds[i].cam.id, status: mode }); }
+  VAN.on('cam', renderChans);
+
+  VAN.$('#b-loop').addEventListener('click', () => feeds.forEach((f, i) => setMode(i, 'LOOP')));
+  VAN.$('#b-live').addEventListener('click', () => feeds.forEach((f, i) => setMode(i, 'LIVE')));
+
+  const km = {};
+  KEYS.forEach((k, i) => km[k] = () => {
+    select(i);
+    setMode(i, (VAN.state.cams[feeds[i].cam.id] || 'LIVE') === 'LOOP' ? 'LIVE' : 'LOOP');
+  });
+  km['l'] = () => feeds.forEach((f, i) => setMode(i, 'LOOP'));
+  km['k'] = () => feeds.forEach((f, i) => setMode(i, 'LIVE'));
+  km['Enter'] = () => grid.classList.toggle('zoom');
+  VAN.keys(km);
+
+  /* phase drives the wall on its own so the operator never has to touch it */
+  VAN.on('phase', p => {
+    if (p >= 2) ['CAM-05', 'CAM-06', 'CAM-07'].forEach(id => VAN.local('cam', { id, status: 'LOOP' }));
+    if (p >= 3) ['CAM-08'].forEach(id => VAN.local('cam', { id, status: 'LOOP' }));
+    if (p <= 1) CAMERAS.forEach(c => VAN.local('cam', { id: c.id, status: 'LIVE' }));
+    renderChans();
+  });
+
+  /* ---------- readouts ---------- */
+  const bufBars = [];
+  for (let i = 0; i < 34; i++) { const b = VAN.el('i'); VAN.$('#buf').appendChild(b); bufBars.push(b); }
+  setInterval(() => {
+    VAN.$('#ro-br').textContent = (3.4 + Math.random() * 1.4).toFixed(1) + ' Mb/s';
+    VAN.$('#ro-drift').textContent = '+' + (Math.random() * 40 | 0) + ' ms';
+    VAN.$('#ro-disk').textContent = (61 + Math.random() * 2).toFixed(1) + ' % / 8 TB';
+    VAN.$('#ro-temp').textContent = (38 + Math.random() * 3).toFixed(0) + ' °C';
+    bufBars.forEach(b => b.style.height = (18 + Math.random() * 82) + '%');
+  }, 900);
+
+  /* ---------- one shared frame loop for all nine feeds ---------- */
+  VAN.loop((dt, t) => {
+    for (let i = 0; i < feeds.length; i++) {
+      const f = feeds[i];
+      if (grid.classList.contains('zoom') && i !== sel) continue;
+      f.feed.draw(t);
+      const d = new Date();
+      f.ts.textContent = VAN.stamp(d) + '.' + VAN.pad(d.getMilliseconds(), 3);
+    }
+  });
+
+  select(0);
+  renderChans();
+})();
+</script>
+</body>
+</html>

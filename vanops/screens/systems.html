@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en" data-theme="phosphor">
+<head>
+<meta charset="utf-8">
+<title>VAN OPS · BUILDING SYSTEMS</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/augmented-ui.min.css">
+<link rel="stylesheet" href="../assets/core.css">
+<style>
+  .sys-stage { grid-template-columns: minmax(0,1fr) 340px; grid-template-rows: auto minmax(0,1fr); }
+  .sys-stage > .sys-main { grid-row: 1; grid-column: 1; }
+  .sys-stage > .sys-tele { grid-row: 2; grid-column: 1; }
+  .sys-stage > .sys-side { grid-row: 1 / span 2; grid-column: 2; }
+  td.tamper-ok { color: var(--dim); } td.tamper-bad { color: var(--alarm); }
+  tr.stale td { color: var(--warn); }
+  .groups { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; align-content: start; }
+  .grp { border: 1px solid var(--line); background: rgba(0,0,0,.20); }
+  .grp h3 { margin: 0; padding: 6px 10px; font-size: 9.5px; letter-spacing: .28em; text-transform: uppercase;
+            color: var(--dim); border-bottom: 1px solid var(--line); display: flex; }
+  .grp h3 b { margin-left: auto; color: var(--hi); font-weight: 500; }
+  .row { display: grid; grid-template-columns: 1fr 96px 62px; gap: 10px; align-items: center;
+         padding: 7px 10px; border-bottom: 1px dotted var(--line); cursor: pointer; transition: background .12s; }
+  .row:last-child { border-bottom: none; }
+  .row:hover { background: rgba(92,255,177,.07); }
+  .row .nm { font-size: 11.5px; display: flex; align-items: center; gap: 7px; }
+  .row .nm em { font-style: normal; color: var(--alarm); font-size: 8.5px; letter-spacing: .16em; border: 1px solid var(--alarm); padding: 0 3px; }
+  .row .st { font-size: 9.5px; letter-spacing: .18em; text-align: right; }
+  .row.on  .st { color: var(--hi); text-shadow: var(--glow); }
+  .row.off .st { color: var(--dim); }
+  .row.hot .st { color: var(--alarm); }
+  .sw { position: relative; height: 16px; border: 1px solid var(--line-hard); background: rgba(0,0,0,.5); }
+  .sw i { position: absolute; top: 1px; bottom: 1px; left: 1px; width: 26px; background: var(--dim);
+          transition: transform .17s cubic-bezier(.2,.9,.2,1), background .17s; }
+  .row.on .sw { border-color: var(--hi); }
+  .row.on .sw i { transform: translateX(32px); background: var(--hi); box-shadow: var(--glow); }
+  .row.hot .sw { border-color: var(--alarm); }
+
+  #power { width: 100%; height: 110px; display: block; }
+  .zonemap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 6px; }
+  .zone { aspect-ratio: 1.6; border: 1px solid var(--line-hard); display: grid; place-items: center;
+          font-size: 9px; letter-spacing: .16em; color: var(--dim); background: rgba(0,0,0,.3); }
+  .zone.armed { color: var(--alarm); border-color: var(--alarm); background: rgba(255,77,77,.06); }
+  .zone.byp { color: var(--hi); border-color: var(--hi); background: rgba(92,255,177,.07); }
+
+  .master {
+    margin-top: 10px; width: 100%; padding: 12px; text-align: center; cursor: pointer;
+    font-size: 12px; letter-spacing: .3em; text-transform: uppercase; position: relative; overflow: hidden;
+    color: var(--alarm); border: 1px solid var(--alarm); background: rgba(255,77,77,.05);
+    --aug-border-bg: var(--alarm); --aug-border-all: 1px; --aug-tl: 14px; --aug-br: 14px;
+  }
+  .master::after { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: rgba(255,77,77,.28); transition: width .05s linear; }
+  .master.armed { color: var(--bg); background: var(--alarm); }
+</style>
+</head>
+<body>
+<div class="viewport">
+  <header class="topbar" data-augmented-ui="tl-clip br-clip border">
+    <span class="brand">BMS<small> /HALLOWELL</small></span>
+    <span class="sep"></span>
+    <span class="label">PANEL</span><span class="val">ARGUS PERIMETER · 10.42.7.30</span>
+    <span class="sep"></span>
+    <span class="label">AUTH</span><span class="ok">installer · escalated</span>
+    <span class="spacer"></span>
+    <div class="phasestrip" data-auto></div>
+    <span class="sep"></span>
+    <span class="hi tabular" data-van="clock">00:00:00</span>
+  </header>
+
+  <main class="stage sys-stage">
+    <section class="panel sys-main" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">SUBSYSTEMS <span class="t-right">CLICK A ROW TO ACTUATE</span></h2>
+      <div class="panel-body"><div class="groups" id="groups"></div></div>
+    </section>
+
+    <section class="panel sys-tele" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">DEVICE TELEMETRY <span class="t-right">RF 868 MHz · POLL 4 S</span></h2>
+      <div class="panel-body flush" style="padding:0 12px 8px;overflow:auto">
+        <table class="data" id="tele"></table>
+      </div>
+    </section>
+
+    <aside class="panel sys-side" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">SITE</h2>
+      <div class="panel-body">
+        <h2 class="panel-title" style="margin:0 -12px 6px;padding-left:12px;border-top:none">MAINS DRAW</h2>
+        <canvas id="power"></canvas>
+        <div class="readout" style="margin-top:6px">
+          <dt>Load</dt><dd id="r-load">—</dd>
+          <dt>Voltage</dt><dd id="r-volt">—</dd>
+          <dt>UPS</dt><dd id="r-ups" class="ok">FLOAT · 100 %</dd>
+          <dt>Genset</dt><dd class="dim">STANDBY</dd>
+        </div>
+
+        <h2 class="panel-title" style="margin:16px -12px 6px;padding-left:12px">ALARM ZONES</h2>
+        <div class="zonemap" id="zones"></div>
+
+        <h2 class="panel-title" style="margin:16px -12px 6px;padding-left:12px">EVENT LOG</h2>
+        <div id="evlog" style="font-size:10.5px;max-height:150px;overflow:auto"></div>
+
+        <h2 class="panel-title" style="margin:16px -12px 6px;padding-left:12px">MASTER</h2>
+        <div class="master" id="master" data-augmented-ui="tl-clip br-clip border">HOLD TO CUT MAINS</div>
+        <p class="dim" style="font-size:10px;margin:6px 0 0;line-height:1.5">
+          Kills the service head. Cameras, panel and mag-locks fail over to UPS in 800 ms.
+          Floods stay dark. Everything on the wall goes with it.
+        </p>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span>ACTUATED <b class="hi" id="s-act">0</b></span>
+    <span>ZONES ARMED <b id="s-zones" class="bad">6</b></span>
+    <span>DOORS OPEN <b id="s-doors" class="dim">0</b></span>
+    <span>MAINS <b id="s-mains" class="ok">ONLINE</b></span>
+    <span class="spacer"></span>
+    <span class="dim">CLICK ROWS · [Z] BYPASS ZONES · [O] OPEN DOORS · [P] CUT MAINS · [\] RESTORE · [?] KEYS</span>
+  </footer>
+</div>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/data.js"></script>
+<script>
+(function () {
+  'use strict';
+  const { SYSTEMS } = VANDATA;
+  VAN.helpExtra = [
+    ['Z', 'Bypass every alarm zone at once'],
+    ['O', 'Release every door — the schematic opens with it'],
+    ['P', 'Cut the mains (same as holding the master)'],
+    ['\\', 'Put the whole building back the way it was']
+  ];
+  VAN.init({ name: 'SYSTEMS', code: 'B-05' });
+
+  const OFF = { ONLINE: 'ISOLATED', ARMED: 'BYPASSED', LOCKED: 'RELEASED', AUTO: 'MANUAL' };
+  const state = {};
+  SYSTEMS.forEach(s => state[s.id] = s.state);
+
+  const GROUPS = ['POWER', 'ALARM', 'ACCESS', 'CLIMATE'];
+  function build() {
+    VAN.$('#groups').innerHTML = GROUPS.map(gr => {
+      const items = SYSTEMS.filter(s => s.group === gr);
+      return '<div class="grp"><h3>' + gr + '<b>' + items.length + '</b></h3>' +
+        items.map(s => rowHTML(s)).join('') + '</div>';
+    }).join('');
+    VAN.$$('#groups .row').forEach(r => r.addEventListener('click', () => toggle(r.dataset.id)));
+  }
+  function rowHTML(s) {
+    const on = state[s.id] === s.state;         // true == still in its default (secure) state
+    return '<div class="row ' + (on ? 'off' : 'on') + (!s.safe && !on ? ' hot' : '') + '" data-id="' + s.id + '">' +
+      '<span class="nm">' + s.name + (s.safe ? '' : ' <em>CRITICAL</em>') + '</span>' +
+      '<span class="sw"><i></i></span>' +
+      '<span class="st">' + state[s.id] + '</span></div>';
+  }
+  function repaint() {
+    VAN.$$('#groups .row').forEach(r => {
+      const s = SYSTEMS.find(x => x.id === r.dataset.id);
+      const secure = state[s.id] === s.state;
+      r.className = 'row ' + (secure ? 'off' : 'on') + (!s.safe && !secure ? ' hot' : '');
+      r.querySelector('.st').textContent = state[s.id];
+    });
+    const acted = SYSTEMS.filter(s => state[s.id] !== s.state).length;
+    const armed = SYSTEMS.filter(s => /^sys-z\d/.test(s.id) && state[s.id] === 'ARMED').length;
+    const open = SYSTEMS.filter(s => s.group === 'ACCESS' && state[s.id] === 'RELEASED').length;
+    VAN.$('#s-act').textContent = acted;
+    VAN.$('#s-zones').textContent = armed;
+    VAN.$('#s-zones').className = armed ? 'bad' : 'hi';
+    VAN.$('#s-doors').textContent = open;
+    VAN.$('#s-doors').className = open ? 'hi' : 'dim';
+    const mains = state['sys-main'] === 'ONLINE';
+    VAN.$('#s-mains').textContent = mains ? 'ONLINE' : 'CUT';
+    VAN.$('#s-mains').className = mains ? 'ok' : 'bad';
+    VAN.$('#zones').innerHTML = SYSTEMS.filter(s => /^sys-z\d/.test(s.id)).map(s =>
+      '<div class="zone ' + (state[s.id] === 'ARMED' ? 'armed' : 'byp') + '">' + s.name.split(' · ')[0] + '</div>').join('');
+  }
+
+  function log(txt, cls) {
+    const d = VAN.el('div', cls);
+    d.innerHTML = '<span class="dim">' + VAN.clock() + '</span>  ' + txt;
+    const l = VAN.$('#evlog');
+    l.insertBefore(d, l.firstChild);
+    while (l.childNodes.length > 40) l.removeChild(l.lastChild);
+  }
+
+  function setSys(id, val, broadcast) {
+    const s = SYSTEMS.find(x => x.id === id);
+    if (!s) return;
+    state[id] = val;
+    const secure = val === s.state;
+    log(s.name + ' <span class="' + (secure ? 'dim' : 'hi') + '">' + val + '</span>', secure ? null : 'warn');
+    // ACCESS rows are real doors — push them to every other monitor
+    if (s.group === 'ACCESS' && broadcast !== false) {
+      VAN.cue('door', { id: s.id, status: val === 'RELEASED' ? 'OPEN' : 'LOCKED' });
+    }
+    repaint();
+  }
+  function toggle(id) {
+    const s = SYSTEMS.find(x => x.id === id);
+    setSys(id, state[id] === s.state ? OFF[s.state] : s.state);
+  }
+
+  /* ---------- mains graph ---------- */
+  const pc = VAN.$('#power'), pfit = VAN.fit(pc), phist = new Array(110).fill(0.62);
+  setInterval(() => {
+    const mains = state['sys-main'] === 'ONLINE';
+    const floods = state['sys-flood'] === 'ONLINE';
+    const base = mains ? (floods ? 0.66 : 0.44) : 0.06;
+    phist.shift(); phist.push(VAN.clamp(base + (Math.random() - .5) * 0.07, 0, 1));
+    VAN.$('#r-load').textContent = (phist[phist.length - 1] * 34).toFixed(1) + ' kW';
+    VAN.$('#r-volt').textContent = mains ? (238 + Math.random() * 4).toFixed(0) + ' V' : '0 V';
+    const u = VAN.$('#r-ups');
+    u.textContent = mains ? 'FLOAT · 100 %' : 'DISCHARGE · ' + (98 - Math.random() * 4).toFixed(0) + ' %';
+    u.className = mains ? 'ok' : 'warn';
+  }, 400);
+  VAN.loop(() => {
+    const w = pfit.w, h = pfit.h, g = pfit.ctx;
+    if (!w) return;
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(120,255,190,.09)';
+    for (let i = 1; i < 5; i++) { g.beginPath(); g.moveTo(0, h * i / 5); g.lineTo(w, h * i / 5); g.stroke(); }
+    const col = getComputedStyle(document.documentElement).getPropertyValue('--hi').trim() || '#5cffb1';
+    g.beginPath();
+    phist.forEach((v, i) => { const x = i / (phist.length - 1) * w, y = h - v * (h - 6) - 3; i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.strokeStyle = col; g.lineWidth = 1.5; g.stroke();
+    g.lineTo(w, h); g.lineTo(0, h); g.closePath();
+    g.fillStyle = col; g.globalAlpha = .10; g.fill(); g.globalAlpha = 1;
+  });
+
+  /* ---------- master hold ---------- */
+  const master = VAN.$('#master');
+  let holdT = 0, holding = false;
+  function cutMains() {
+    setSys('sys-main', 'ISOLATED');
+    setSys('sys-flood', 'ISOLATED');
+    master.classList.add('armed');
+    master.textContent = 'MAINS CUT — HOLD TO RESTORE';
+    VAN.cue('blackout', { ms: 900 });
+    log('<span class="bad">MAIN SERVICE ISOLATED — SITE ON UPS</span>', 'bad');
+  }
+  function restoreMains() {
+    setSys('sys-main', 'ONLINE'); setSys('sys-flood', 'ONLINE');
+    master.classList.remove('armed');
+    master.textContent = 'HOLD TO CUT MAINS';
+  }
+  master.addEventListener('mousedown', () => { holding = true; holdT = 0; });
+  ['mouseup', 'mouseleave'].forEach(ev => master.addEventListener(ev, () => { holding = false; holdT = 0; master.style.backgroundImage = ''; }));
+  VAN.loop(dt => {
+    if (!holding) return;
+    holdT += dt;
+    const p = VAN.clamp(holdT / 1.1, 0, 1);
+    master.style.backgroundImage = 'linear-gradient(90deg, rgba(255,77,77,.35) ' + (p * 100) + '%, transparent ' + (p * 100) + '%)';
+    if (p >= 1) {
+      holding = false; holdT = 0; master.style.backgroundImage = '';
+      state['sys-main'] === 'ONLINE' ? cutMains() : restoreMains();
+    }
+  });
+
+  /* ---------- bulk actions ---------- */
+  function bypassAll() { SYSTEMS.filter(s => s.group === 'ALARM').forEach(s => setSys(s.id, 'BYPASSED')); }
+  function openAll() { SYSTEMS.filter(s => s.group === 'ACCESS').forEach(s => setSys(s.id, 'RELEASED')); }
+  function restoreAll() {
+    SYSTEMS.forEach(s => setSys(s.id, s.state));
+    master.classList.remove('armed'); master.textContent = 'HOLD TO CUT MAINS';
+    log('<span class="dim">ALL SUBSYSTEMS RESTORED</span>');
+  }
+
+  VAN.keys({
+    z: bypassAll, o: openAll, p: () => state['sys-main'] === 'ONLINE' ? cutMains() : restoreMains(), '\\': restoreAll
+  });
+
+  /* other monitors can move doors too */
+  VAN.on('door', d => {
+    const s = SYSTEMS.find(x => x.id === d.id);
+    if (!s) return;
+    const want = d.status === 'OPEN' ? 'RELEASED' : 'LOCKED';
+    if (state[d.id] !== want) { state[d.id] = want; repaint(); log(s.name + ' <span class="hi">' + want + '</span>', 'warn'); }
+  });
+  VAN.on('phase', p => {
+    if (p >= 1) setSys('d-l1-svc', 'RELEASED');
+    if (p >= 2) { bypassAll(); setSys('sys-flood', 'ISOLATED'); }
+    if (p >= 3) { setSys('d-b1-vault', 'RELEASED'); setSys('d-b1-sec', 'RELEASED'); }
+    if (p === 0) restoreAll();
+  });
+
+  /* ---------- device telemetry ---------- */
+  const DEVICES = [];
+  VANDATA.FLOORS.forEach(F => {
+    F.sensors.forEach(sn => DEVICES.push({
+      id: sn.id.toUpperCase().replace('S-', 'DEV-'), kind: sn.type, zone: sn.zone, floor: F.id,
+      room: (F.rooms.find(r => sn.x >= r.x && sn.x <= r.x + r.w && sn.y >= r.y && sn.y <= r.y + r.h) || {}).name || '—',
+      batt: 62 + (VAN.rng(sn.id)() * 37 | 0), rssi: -(48 + (VAN.rng(sn.id + 'r')() * 32 | 0)), seen: 0, tamper: false
+    }));
+    (F.cameras || []).forEach(c => DEVICES.push({
+      id: c.id, kind: 'CAM', zone: '—', floor: F.id, room: 'fixed dome',
+      batt: 100, rssi: -(38 + (VAN.rng(c.id)() * 18 | 0)), seen: 0, tamper: false, mains: true
+    }));
+  });
+  function paintTele() {
+    VAN.$('#tele').innerHTML =
+      '<thead><tr><th>Device</th><th>Type</th><th>Level</th><th>Space</th><th>Zone</th>' +
+      '<th class="num">RSSI</th><th class="num">Batt</th><th class="num">Last seen</th><th>Tamper</th></tr></thead><tbody>' +
+      DEVICES.map(d => {
+        const byp = /^\d$/.test(String(d.zone)) && state['sys-z' + d.zone] === 'BYPASSED';
+        const looped = VAN.state.cams[d.id] === 'LOOP';
+        return '<tr class="' + (d.seen > 9 ? 'stale' : '') + '">' +
+          '<td class="' + (byp || looped ? 'hi' : '') + '">' + d.id + '</td>' +
+          '<td class="dim">' + d.kind + '</td>' +
+          '<td class="dim">' + d.floor + '</td>' +
+          '<td class="dim">' + d.room + '</td>' +
+          '<td class="' + (byp ? 'hi' : 'dim') + '">' + (byp ? 'BYPASSED' : d.zone === '—' ? '—' : 'Z' + d.zone) + '</td>' +
+          '<td class="num">' + d.rssi + ' dBm</td>' +
+          '<td class="num">' + (d.mains ? 'PoE' : d.batt + ' %') + '</td>' +
+          '<td class="num">' + d.seen + ' s</td>' +
+          '<td class="' + (d.tamper ? 'tamper-bad' : 'tamper-ok') + '">' + (d.tamper ? 'OPEN' : 'sealed') + '</td></tr>';
+      }).join('') + '</tbody>';
+  }
+  setInterval(() => {
+    DEVICES.forEach(d => {
+      d.seen = Math.random() < 0.72 ? (Math.random() * 4 | 0) : d.seen + 4;
+      d.rssi = VAN.clamp(d.rssi + (Math.random() < .5 ? -1 : 1), -92, -32);
+    });
+    paintTele();
+  }, 1400);
+  paintTele();
+
+  build(); repaint();
+  log('<span class="dim">installer session opened from 10.42.7.66</span>');
+  log('<span class="dim">panel firmware 4.1.2 · supervisory OK</span>');
+})();
+</script>
+</body>
+</html>

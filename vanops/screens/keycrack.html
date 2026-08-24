@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en" data-theme="amber">
+<head>
+<meta charset="utf-8">
+<title>VAN OPS · KEY RECOVERY</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/augmented-ui.min.css">
+<link rel="stylesheet" href="../assets/core.css">
+<style>
+  .kc-stage { grid-template-rows: auto minmax(0,1fr); grid-template-columns: 300px minmax(0,1fr) 292px; }
+  .kc-hero { grid-column: 1 / -1; }
+  .reels { display: flex; gap: 8px; justify-content: center; align-items: center; padding: 18px 0 10px; }
+  .reel {
+    width: 62px; height: 92px; overflow: hidden; position: relative;
+    border: 1px solid var(--line-hard); background: rgba(0,0,0,.45);
+    --aug-border-bg: var(--line-hard); --aug-border-all: 1px; --aug-tl: 9px; --aug-br: 9px;
+  }
+  .reel .strip { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+  .reel .strip span { display: block; height: 92px; line-height: 92px; text-align: center;
+                      font-size: 46px; font-weight: 700; color: var(--fg); }
+  .reel::after { content: ''; position: absolute; inset: 0; pointer-events: none;
+                 background: linear-gradient(var(--bg), transparent 26%, transparent 74%, var(--bg)); }
+  .reel.locked { border-color: var(--hi); --aug-border-bg: var(--hi); box-shadow: 0 0 22px rgba(255,192,106,.22) inset; }
+  .reel.locked .strip span { color: var(--hi); text-shadow: var(--glow); }
+  .reel.flash { animation: rflash .3s steps(2) 2; }
+  @keyframes rflash { 50% { background: var(--hi); } }
+  .reel .idx { position: absolute; bottom: 2px; left: 0; right: 0; text-align: center;
+               font-size: 8px; letter-spacing: .2em; color: var(--dim); z-index: 2; }
+  .reel-sep { width: 8px; height: 2px; background: var(--line-hard); }
+
+  .hashwall { font-size: 11px; line-height: 1.45; color: var(--dim); height: 100%; overflow: hidden;
+              display: flex; flex-direction: column-reverse; }
+  .hashwall div { white-space: nowrap; }
+  .hashwall div.hit { color: var(--hi); text-shadow: var(--glow); }
+
+  /* thermal keypad */
+  .pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+  .key { position: relative; aspect-ratio: 1.25; border: 1px solid var(--line-hard); background: rgba(0,0,0,.35);
+         display: grid; place-items: center; font-size: 17px; color: var(--dim); overflow: hidden; }
+  .key .heat { position: absolute; inset: -30%; opacity: 0; transition: opacity .5s; }
+  .key span { position: relative; z-index: 2; }
+  .key.hot { color: #0a0704; }
+  .key.hot .heat { opacity: 1; background: radial-gradient(circle at 50% 50%, #fff6d8, #ff9d3d 42%, rgba(255,77,64,.35) 68%, transparent 78%); }
+  .key.warmish .heat { opacity: .5; background: radial-gradient(circle at 50% 50%, #ff9d3d, rgba(255,77,64,.2) 60%, transparent 76%); }
+
+  #ent { width: 100%; height: 76px; display: block; }
+  .big { font-size: 26px; letter-spacing: .16em; color: var(--hi); text-shadow: var(--glow); font-variant-numeric: tabular-nums; }
+  .result { text-align: center; padding: 6px 0 2px; font-size: 12px; letter-spacing: .34em; text-transform: uppercase; color: var(--dim); }
+  .result.done { color: var(--hi); text-shadow: var(--glow); animation: chipPulse 1s steps(2) 4; }
+</style>
+</head>
+<body>
+<div class="viewport">
+  <header class="topbar" data-augmented-ui="tl-clip br-clip border">
+    <span class="brand">ARGUS<small> /KEYPAD-B6</small></span>
+    <span class="sep"></span>
+    <span class="label">DEVICE</span><span class="val">VAULT MAG-LOCK · ZONE 6</span>
+    <span class="sep"></span>
+    <span class="label">MODE</span><span class="val" id="mode">OFFLINE DICTIONARY</span>
+    <span class="spacer"></span>
+    <div class="phasestrip" data-auto></div>
+    <span class="sep"></span>
+    <span class="hi tabular" data-van="clock">00:00:00</span>
+  </header>
+
+  <main class="stage kc-stage">
+
+    <section class="panel kc-hero" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">ACCESS CODE RECOVERY <span class="t-right" id="hero-sub">8 DIGIT · KEYSPACE 10^8</span></h2>
+      <div class="panel-body" style="padding:0 12px 10px">
+        <div class="reels" id="reels"></div>
+        <div class="result" id="result">SEARCHING</div>
+        <div class="meter striped" style="margin:8px 40px 0"><i id="prog" style="width:0%"></i></div>
+      </div>
+    </section>
+
+    <aside class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">ATTACK</h2>
+      <div class="panel-body">
+        <div class="readout">
+          <dt>Rate</dt><dd id="r-rate">—</dd>
+          <dt>Tried</dt><dd id="r-tried">0</dd>
+          <dt>Remaining</dt><dd id="r-rem">—</dd>
+          <dt>ETA</dt><dd id="r-eta">—</dd>
+          <dt>Lockout</dt><dd class="ok">SUPPRESSED</dd>
+          <dt>Retries</dt><dd id="r-retry">0 / ∞</dd>
+        </div>
+
+        <h2 class="panel-title" style="margin:14px -12px 6px;padding-left:12px">ENTROPY</h2>
+        <canvas id="ent"></canvas>
+        <div class="readout" style="margin-top:4px">
+          <dt>Shannon</dt><dd id="r-sh">—</dd>
+          <dt>Confidence</dt><dd id="r-conf">—</dd>
+        </div>
+
+        <h2 class="panel-title" style="margin:14px -12px 6px;padding-left:12px">CONTROL</h2>
+        <div class="btn-row">
+          <button class="btn" id="b-run" data-augmented-ui="tl-clip br-clip border">RUN [SPACE]</button>
+          <button class="btn danger" id="b-reset" data-augmented-ui="tl-clip br-clip border">RESET [\]</button>
+        </div>
+      </div>
+    </aside>
+
+    <section class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">CANDIDATE STREAM <span class="t-right">HMAC-SHA256</span></h2>
+      <div class="panel-body flush" style="padding:8px 12px"><div class="hashwall" id="wall"></div></div>
+    </section>
+
+    <aside class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">THERMAL RESIDUE</h2>
+      <div class="panel-body">
+        <p class="dim" style="font-size:10.5px;line-height:1.55;margin:0">
+          FLIR pass on the keypad face, 40 s after the last legitimate entry.
+          Heat ranks the digits by how recently a finger touched them.
+        </p>
+        <div class="pad" id="pad"></div>
+        <div class="readout" style="margin-top:10px">
+          <dt>Digits used</dt><dd id="r-digs">—</dd>
+          <dt>Search cut</dt><dd class="hi" id="r-cut">—</dd>
+          <dt>Surface Δ</dt><dd id="r-dt">—</dd>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span>STATE <b id="s-state" class="warn">RUNNING</b></span>
+    <span>CODE <b id="s-code" class="dim">— — — — — — — —</b></span>
+    <span>MAG-LOCK <b id="s-lock" class="warn">ENERGISED</b></span>
+    <span class="spacer"></span>
+    <span class="dim">[SPACE] RUN/PAUSE · [\] RESET · [1-5] PHASE · [?] KEYS</span>
+  </footer>
+</div>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/data.js"></script>
+<script>
+(function () {
+  'use strict';
+  VAN.helpExtra = [['Space', 'Run or pause the crack'], ['\\', 'Reset for another take']];
+  VAN.init({ name: 'KEYCRACK', code: 'K-04' });
+
+  const CODE = '47190288';                      // what the reels land on
+  const CHARS = '0123456789';
+  const N = CODE.length;
+  const reels = [];
+
+  /* ---------- reels ---------- */
+  const host = VAN.$('#reels');
+  for (let i = 0; i < N; i++) {
+    if (i === 4) host.appendChild(VAN.el('div', 'reel-sep'));
+    const r = VAN.el('div', 'reel');
+    r.setAttribute('data-augmented-ui', 'tl-clip br-clip border');
+    const strip = VAN.el('div', 'strip');
+    // three passes of the charset so the wrap is never visible
+    for (let p = 0; p < 3; p++) for (const c of CHARS) strip.appendChild(VAN.el('span', null, c));
+    r.appendChild(strip);
+    const idx = VAN.el('div', 'idx', String(i + 1)); r.appendChild(idx);
+    host.appendChild(r);
+    reels.push({ el: r, strip, pos: Math.random() * 10, spin: 18 + Math.random() * 12, locked: false });
+  }
+  const CELL = 92;
+
+  /* ---------- thermal keypad ---------- */
+  const used = Array.from(new Set(CODE.split(''))).sort();
+  const PADKEYS = ['1','2','3','4','5','6','7','8','9','*','0','#'];
+  VAN.$('#pad').innerHTML = PADKEYS.map(k => {
+    const hot = used.includes(k);
+    const warm = !hot && (k === '*' || k === '#');
+    return '<div class="key ' + (hot ? 'hot' : warm ? 'warmish' : '') + '"><div class="heat"></div><span>' + k + '</span></div>';
+  }).join('');
+  VAN.$('#r-digs').textContent = used.join(' ');
+  VAN.$('#r-cut').textContent = '10^8 → ' + used.length + '^8';
+  VAN.$('#hero-sub').textContent = '8 DIGIT · REDUCED TO ' + used.length + ' SYMBOLS';
+
+  /* ---------- state ---------- */
+  let running = false, locked = 0, tried = 0, t0 = 0, rate = 0;
+  const TOTAL = Math.pow(used.length, N);
+  const LOCK_EVERY = 1.35;   // seconds between digits falling
+  let nextLock = 0;
+
+  function setState(s, cls) { const e = VAN.$('#s-state'); e.textContent = s; e.className = cls; }
+
+  function start() {
+    if (locked >= N) return;
+    running = true; t0 = performance.now() / 1000; nextLock = LOCK_EVERY;
+    setState('RUNNING', 'warn');
+    VAN.$('#result').textContent = 'SEARCHING'; VAN.$('#result').className = 'result';
+    VAN.$('#b-run').textContent = 'PAUSE [SPACE]';
+  }
+  function pause() { running = false; setState('HELD', 'dim'); VAN.$('#b-run').textContent = 'RUN [SPACE]'; }
+  function toggle() { running ? pause() : start(); }
+  function reset() {
+    running = false; locked = 0; tried = 0; nextLock = 0;
+    reels.forEach(r => { r.locked = false; r.el.classList.remove('locked'); r.pos = Math.random() * 10; });
+    VAN.$('#prog').style.width = '0%';
+    VAN.$('#s-code').textContent = '— — — — — — — —'; VAN.$('#s-code').className = 'dim';
+    VAN.$('#s-lock').textContent = 'ENERGISED'; VAN.$('#s-lock').className = 'warn';
+    VAN.$('#result').textContent = 'SEARCHING'; VAN.$('#result').className = 'result';
+    VAN.$('#b-run').textContent = 'RUN [SPACE]';
+    setState('IDLE', 'dim');
+  }
+
+  function lockNext() {
+    const r = reels[locked];
+    r.locked = true;
+    // ease the strip onto the winning glyph
+    const target = CHARS.indexOf(CODE[locked]) + 10;
+    r.pos = target;
+    r.el.classList.add('locked', 'flash');
+    setTimeout(() => r.el.classList.remove('flash'), 640);
+    locked++;
+    const shown = CODE.slice(0, locked).split('').join(' ') + (locked < N ? ' ' + '—'.repeat(N - locked).split('').join(' ') : '');
+    VAN.$('#s-code').textContent = shown;
+    VAN.$('#s-code').className = locked >= N ? 'hi' : 'warn';
+    if (locked >= N) finish();
+  }
+
+  function finish() {
+    running = false;
+    setState('RECOVERED', 'ok');
+    VAN.$('#result').textContent = 'CODE RECOVERED — MAG-LOCK RELEASED';
+    VAN.$('#result').className = 'result done';
+    VAN.$('#prog').style.width = '100%';
+    VAN.$('#s-lock').textContent = 'RELEASED'; VAN.$('#s-lock').className = 'hi';
+    VAN.$('#b-run').textContent = 'RUN [SPACE]';
+    VAN.cue('door', { id: 'd-b1-vault', status: 'OPEN' });
+  }
+
+  /* ---------- candidate stream ---------- */
+  const wall = VAN.$('#wall');
+  setInterval(() => {
+    if (!running) return;
+    const cand = Array.from({ length: N }, () => VAN.pick(used)).join('');
+    const hit = Math.random() < 0.06;
+    const d = VAN.el('div', hit ? 'hit' : null);
+    d.textContent = cand + '  ' + VAN.hex(40).toLowerCase() + (hit ? '  ← partial' : '');
+    wall.insertBefore(d, wall.firstChild);
+    while (wall.childNodes.length > 60) wall.removeChild(wall.lastChild);
+  }, 55);
+
+  /* ---------- entropy sparkline ---------- */
+  const ent = VAN.$('#ent'), efit = VAN.fit(ent), ehist = new Array(70).fill(0.9);
+  setInterval(() => {
+    ehist.shift();
+    ehist.push(VAN.clamp(0.92 - locked * 0.11 + (Math.random() - .5) * 0.09, 0.02, 1));
+    VAN.$('#r-sh').textContent = (ehist[ehist.length - 1] * 3.32).toFixed(2) + ' bits/sym';
+    VAN.$('#r-conf').textContent = Math.round(locked / N * 100) + ' %';
+  }, 200);
+  VAN.loop(() => {
+    const w = efit.w, h = efit.h, g = efit.ctx;
+    if (!w) return;
+    g.clearRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(255,176,84,.10)';
+    for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(0, h * i / 4); g.lineTo(w, h * i / 4); g.stroke(); }
+    g.beginPath();
+    ehist.forEach((v, i) => { const x = i / (ehist.length - 1) * w, y = h - v * (h - 4) - 2; i ? g.lineTo(x, y) : g.moveTo(x, y); });
+    g.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--hi').trim() || '#ffc06a';
+    g.lineWidth = 1.5; g.stroke();
+  });
+
+  /* ---------- main loop ---------- */
+  VAN.loop((dt, t) => {
+    reels.forEach(r => {
+      if (!r.locked) r.pos = (r.pos + r.spin * dt) % 10;
+      r.strip.style.transform = 'translateY(' + (-(r.pos + 10) * CELL).toFixed(1) + 'px)';
+    });
+    if (!running) return;
+    nextLock -= dt;
+    if (nextLock <= 0 && locked < N) { lockNext(); nextLock = LOCK_EVERY; }
+
+    const p = VAN.clamp(locked / N + (LOCK_EVERY - nextLock) / LOCK_EVERY / N, 0, 1);
+    rate = 4.1e5 + Math.sin(t * 3) * 3.4e4;
+    tried = Math.round(TOTAL * p * 0.985);
+    VAN.$('#prog').style.width = (p * 100).toFixed(1) + '%';
+    VAN.$('#r-rate').textContent = (rate / 1e6).toFixed(2) + ' M/s';
+    VAN.$('#r-tried').textContent = Math.round(tried).toLocaleString();
+    VAN.$('#r-rem').textContent = Math.max(0, Math.round(TOTAL - tried)).toLocaleString();
+    VAN.$('#r-eta').textContent = locked >= N ? '00:00' : VAN.countdown((N - locked) * LOCK_EVERY);
+    VAN.$('#r-retry').textContent = (locked * 3 + (Math.random() * 3 | 0)) + ' / ∞';
+    VAN.$('#r-dt').textContent = (2.4 - locked * 0.12 + Math.random() * .2).toFixed(1) + ' °C';
+  });
+
+  VAN.$('#b-run').addEventListener('click', toggle);
+  VAN.$('#b-reset').addEventListener('click', reset);
+  VAN.keys({ ' ': toggle, '\\': reset });
+  VAN.on('phase', p => { if (p >= 3 && locked < N) start(); if (p <= 1) reset(); });
+
+  reset();
+})();
+</script>
+</body>
+</html>

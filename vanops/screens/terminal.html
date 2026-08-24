@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en" data-theme="phosphor">
+<head>
+<meta charset="utf-8">
+<title>VAN OPS · SHELL</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/augmented-ui.min.css">
+<link rel="stylesheet" href="../assets/core.css">
+<style>
+  .term-stage { grid-template-columns: minmax(0,1fr) 324px; }
+  .termwrap { position: relative; min-height: 0; }
+  #term {
+    height: 100%; overflow-y: auto; padding: 12px 16px 40px;
+    font-size: 13.5px; line-height: 1.52; white-space: pre-wrap; word-break: break-word;
+  }
+  #term .ln { color: var(--fg); }
+  #term .cmd { color: #e8fff4; }
+  #term .cmd .ps1 { color: var(--hi); text-shadow: var(--glow); }
+  .c-ok { color: var(--ok); } .c-bad { color: var(--alarm); } .c-warn { color: var(--warn); }
+  .c-hi { color: var(--hi); text-shadow: var(--glow); } .c-dim { color: var(--dim); }
+  .c-acc { color: var(--accent); } .c-white { color: #dff7ec; }
+  .tag { color: var(--dim); }
+  #term .bar { display: inline-block; color: var(--hi); }
+  #term .hexb { color: var(--dim); font-size: 12.5px; }
+  #cursor { display: inline-block; width: 8.4px; height: 15px; background: var(--hi);
+            vertical-align: -3px; box-shadow: var(--glow); animation: cb 1.05s steps(2) infinite; }
+  @keyframes cb { 50% { opacity: 0; } }
+  #input { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
+
+  .modechip { position: absolute; top: 8px; right: 14px; z-index: 5; }
+
+  /* rail */
+  .kv { display: grid; grid-template-columns: 78px 1fr; gap: 2px 8px; font-size: 11px; margin-bottom: 3px; }
+  .kv b { color: var(--dim); font-weight: 400; font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; padding-top: 1px; }
+  .loot { font-size: 10.5px; padding: 2.5px 0; border-bottom: 1px dotted var(--line); display: flex; gap: 8px; }
+  .loot .sz { margin-left: auto; color: var(--dim); }
+  .portrow { display: grid; grid-template-columns: 52px 1fr auto; font-size: 10.5px; gap: 6px; padding: 2px 0; border-bottom: 1px dotted var(--line); }
+
+  /* manifest overlay */
+  #manifest {
+    position: absolute; inset: 0; z-index: 20; background: var(--panel-solid);
+    display: none; flex-direction: column; overflow: hidden;
+    --aug-border-bg: var(--hi); --aug-border-all: 2px; --aug-tl: 26px; --aug-br: 26px;
+    animation: mIn .32s cubic-bezier(.2,.9,.2,1);
+  }
+  #manifest.on { display: flex; }
+  @keyframes mIn { from { transform: translateY(26px); opacity: 0; } }
+  .m-head { padding: 14px 22px 10px; border-bottom: 1px solid var(--line-hard); }
+  .m-head h2 { margin: 0; font-size: 17px; letter-spacing: .26em; color: var(--hi); text-shadow: var(--glow); }
+  .m-head p { margin: 3px 0 0; font-size: 10px; letter-spacing: .22em; color: var(--dim); text-transform: uppercase; }
+  .m-body { flex: 1 1 auto; overflow: auto; padding: 14px 22px 20px; }
+  .m-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 22px; margin-bottom: 16px; }
+  .m-grid div span { display: block; font-size: 9px; letter-spacing: .22em; color: var(--dim); text-transform: uppercase; }
+  .m-grid div b { font-weight: 500; color: var(--fg); font-size: 12px; }
+  .m-flag { color: var(--alarm); border: 1px solid var(--alarm); padding: 0 5px; font-size: 9px; letter-spacing: .18em; }
+  .m-flag.dark { color: var(--warn); border-color: var(--warn); }
+  .strike { color: var(--dim); text-decoration: line-through; text-decoration-color: var(--alarm); }
+  .m-chain { display: grid; grid-template-columns: 120px 130px 1fr; gap: 2px 14px; font-size: 11px; }
+  .m-chain .t { color: var(--dim); }
+  .m-chain .e { color: var(--hi); }
+  .m-chain .bad { color: var(--alarm); }
+  .m-stamp { position: absolute; right: 34px; bottom: 26px; font-size: 40px; letter-spacing: .2em;
+             color: var(--alarm); opacity: .16; transform: rotate(-14deg); border: 3px solid var(--alarm); padding: 6px 18px; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="viewport">
+
+  <header class="topbar" data-augmented-ui="tl-clip br-clip border">
+    <span class="brand">GHOSTLINE<small> /SHELL</small></span>
+    <span class="sep"></span>
+    <span class="label">TARGET</span><span class="val" id="tgt">—</span>
+    <span class="sep"></span>
+    <span class="label">UID</span><span class="val" id="uid">ghostline</span>
+    <span class="sep"></span>
+    <span class="label">TUNNEL</span><span class="ok" id="tun">3 HOP · TOR</span>
+    <span class="spacer"></span>
+    <div class="phasestrip" data-auto></div>
+    <span class="sep"></span>
+    <span class="hi tabular" data-van="clock">00:00:00</span>
+  </header>
+
+  <main class="stage term-stage">
+
+    <section class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">SHELL — <span id="hostname">van@ghostline</span>
+        <span class="t-right"><span id="steps">0</span>/<span id="stepsAll">0</span> STAGES</span></h2>
+      <div class="panel-body flush termwrap">
+        <span class="chip on modechip" id="modechip">SCRIPT MODE</span>
+        <div id="term"></div>
+        <input id="input" autocomplete="off" spellcheck="false">
+
+        <div id="manifest" data-augmented-ui="tl-clip br-clip border">
+          <div class="m-head">
+            <h2>BILL OF LADING — <span id="m-bol"></span></h2>
+            <p><span id="m-shipper"></span> · DECRYPTED ANNEX B · DECLARED vs ACTUAL</p>
+          </div>
+          <div class="m-body">
+            <div class="m-grid" id="m-grid"></div>
+            <table class="data" id="m-table"></table>
+            <h2 class="panel-title" style="margin:20px 0 8px;padding-left:0;border-bottom:1px solid var(--line-hard)">CHAIN OF CUSTODY</h2>
+            <div class="m-chain" id="m-chain"></div>
+          </div>
+          <div class="m-stamp">EVIDENCE</div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">TARGET</h2>
+      <div class="panel-body">
+        <div class="kv"><b>Host</b><span id="r-host">—</span></div>
+        <div class="kv"><b>Addr</b><span id="r-ip">—</span></div>
+        <div class="kv"><b>OS</b><span id="r-os">—</span></div>
+        <div class="kv"><b>Access</b><span id="r-acc" class="dim">none</span></div>
+        <div class="kv"><b>Creds</b><span id="r-cred" class="dim">none</span></div>
+
+        <h2 class="panel-title" style="margin:14px -12px 6px;padding-left:12px">OPEN PORTS</h2>
+        <div id="r-ports"><div class="dim" style="font-size:10.5px">no scan data</div></div>
+
+        <h2 class="panel-title" style="margin:14px -12px 6px;padding-left:12px">EXFIL</h2>
+        <div id="r-loot"><div class="dim" style="font-size:10.5px">nothing pulled</div></div>
+
+        <h2 class="panel-title" style="margin:14px -12px 6px;padding-left:12px">NOISE FLOOR</h2>
+        <div class="readout">
+          <dt>Log writes</dt><dd id="r-logw">0</dd>
+          <dt>Suppressed</dt><dd id="r-logs" class="ok">0</dd>
+          <dt>Session age</dt><dd data-van="uptime">00:00</dd>
+        </div>
+        <div class="meter striped" style="margin-top:8px"><i id="r-risk" style="width:6%"></i></div>
+        <div class="label" style="margin-top:4px">DETECTION RISK</div>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span>MODE <b id="s-mode" class="hi">SCRIPT</b></span>
+    <span>STAGE <b id="s-stage">0</b></span>
+    <span>MANIFEST <b id="s-man" class="dim">SEALED</b></span>
+    <span class="spacer"></span>
+    <span class="dim">MASH ANY KEY TO HACK · [`] MODE · [M] MANIFEST · [\] RESET · [?] KEYS</span>
+  </footer>
+</div>
+
+<script src="../assets/core.js"></script>
+<script src="../assets/data.js"></script>
+<script>
+(function () {
+  'use strict';
+  const { FICTION, MANIFEST } = VANDATA;
+  VAN.helpExtra = [
+    ['Any key', 'SCRIPT MODE — types the next chunk of the hack. Mash freely.'],
+    ['`  (backtick)', 'Swap SCRIPT MODE / LIVE MODE (a real command prompt)'],
+    ['M', 'Slam the decrypted manifest up over the shell'],
+    ['\\', 'Reset the whole hack to stage zero for another take']
+  ];
+  VAN.init({ name: 'TERMINAL', code: 'T-00' });
+
+  const term = VAN.$('#term');
+  const PS1 = '<span class="ps1">ghostline@van</span><span class="c-dim">:</span><span class="c-acc">~</span><span class="c-dim">$</span> ';
+
+  /* ---------------- output primitives ---------------- */
+  function line(html, cls) {
+    const d = VAN.el('div', 'ln' + (cls ? ' ' + cls : ''));
+    d.innerHTML = html;
+    term.appendChild(d);
+    term.scrollTop = term.scrollHeight;
+    return d;
+  }
+  function bar(pct, w) {
+    w = w || 34;
+    const f = Math.round(pct * w);
+    return '<span class="bar">[' + '█'.repeat(f) + '<span class="c-dim">' + '░'.repeat(w - f) + '</span>]</span> ' +
+           '<span class="c-hi">' + VAN.pad(Math.round(pct * 100), 3, ' ') + '%</span>';
+  }
+  const SPIN = ['|', '/', '-', '\\'];   // ASCII only: Consolas has no Braille block
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  /* ---------------- the hack ---------------- */
+  const D = FICTION.domain, IP = '203.0.113.44';
+  const SCRIPT = [
+    {
+      cmd: 'nmap -sS -Pn -T4 -p- --min-rate 4000 ' + D,
+      out: [
+        { t: 'pause', ms: 260 },
+        'Starting Nmap 7.94 ( https://nmap.org ) at 13 NOV 02:07 EST',
+        { t: 'spin', label: 'syn sweep 65535 ports', ms: 1500 },
+        'Nmap scan report for ' + D + ' (' + IP + ')',
+        'Host is up (0.0089s latency).',
+        'Not shown: 65529 filtered tcp ports (no-response)',
+        '',
+        '<span class="c-dim">PORT      STATE  SERVICE        VERSION</span>',
+        '22/tcp    open   ssh            OpenSSH 8.4p1 Debian 5+deb11u3',
+        '80/tcp    open   http           nginx 1.18.0',
+        '443/tcp   open   ssl/http       nginx 1.18.0',
+        '3389/tcp  open   ms-wbt-server  xrdp',
+        '<span class="c-warn">8443/tcp  open   ssl/https      Jetty 9.4.44  (EDI gateway)</span>',
+        '<span class="c-warn">5432/tcp  open   postgresql     PostgreSQL 12.11</span>',
+        '',
+        'Nmap done: 1 IP address (1 host up) scanned in 41.22 seconds',
+        { t: 'fn', f: () => { rail.ports = true; rail.host = D; rail.ip = IP; rail.os = 'Debian 11 (bullseye)'; paintRail(); } }
+      ]
+    },
+    {
+      cmd: './edi-probe --host ' + D + ':8443 --enum --quiet',
+      out: [
+        '<span class="tag">[*]</span> TLS  CN=*.' + D + '  issuer=R3  exp 2027-02-11',
+        '<span class="tag">[*]</span> server banner .............. Jetty 9.4.44.v20210927',
+        { t: 'pause', ms: 300 },
+        '<span class="tag">[*]</span> matching known defects',
+        { t: 'bar', label: 'cve corpus', ms: 1100 },
+        '<span class="c-warn">[!]</span> Jetty &lt;=9.4.46 → CVE-2021-28169  (request-dispatcher traversal)',
+        '<span class="tag">[*]</span> probing /static/%2e%2e/%2e%2e/WEB-INF/web.xml',
+        { t: 'pause', ms: 420 },
+        '<span class="c-ok">[+]</span> 200 OK · 4,112 bytes · <span class="c-hi">traversal confirmed</span>',
+        { t: 'fn', f: () => { rail.acc = 'read-only (unauth)'; risk(0.18); paintRail(); } }
+      ]
+    },
+    {
+      cmd: 'cat loot/web.xml | grep -A3 -i "jdbc\\|password\\|user"',
+      out: [
+        '<span class="c-dim">  &lt;resource-ref&gt;</span>',
+        '<span class="c-dim">    &lt;res-ref-name&gt;</span>jdbc/manifests<span class="c-dim">&lt;/res-ref-name&gt;</span>',
+        '<span class="c-dim">    &lt;res-auth&gt;Container&lt;/res-auth&gt;</span>',
+        '<span class="c-dim">  &lt;/resource-ref&gt;</span>',
+        '<span class="c-dim">  &lt;!-- dba note 2019-04: rotate before audit --&gt;</span>',
+        '<span class="c-dim">  &lt;!-- </span><span class="c-hi">svc_customs</span><span class="c-dim"> / </span><span class="c-hi">Wh4rf-D3lta-2019</span><span class="c-dim"> --&gt;</span>',
+        '',
+        '<span class="c-ok">[+]</span> credential pair recovered from a source comment. Seven years old.',
+        '<span class="c-dim">    they never rotated it.</span>',
+        { t: 'fn', f: () => { rail.cred = 'svc_customs : Wh4rf-D3lta-2019'; rail.loot.push(['web.xml', '4.1 KB']); risk(0.31); paintRail(); } },
+        { t: 'cue', evt: 'phase', data: 1 }
+      ]
+    },
+    {
+      cmd: 'psql -h ' + IP + ' -U svc_customs -d manifests',
+      out: [
+        'Password for user svc_customs: <span class="c-dim">••••••••••••••••</span>',
+        { t: 'spin', label: 'authenticating', ms: 900 },
+        'psql (12.11 (Debian 12.11-1.pgdg110+1))',
+        'SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384)',
+        'Type "help" for help.',
+        '',
+        '<span class="c-hi">manifests=&gt;</span> \\dt',
+        '<span class="c-dim">           List of relations</span>',
+        '<span class="c-dim"> Schema |      Name       | Type  |   Owner</span>',
+        '<span class="c-dim">--------+-----------------+-------+------------</span>',
+        ' public | bills_of_lading | table | svc_customs',
+        ' public | containers      | table | svc_customs',
+        ' public | manifest_lines  | table | svc_customs',
+        ' public | seal_events     | table | svc_customs',
+        ' public | annex_b         | table | <span class="c-warn">restricted</span>',
+        '(5 rows)',
+        { t: 'fn', f: () => { rail.acc = 'psql · svc_customs'; rail.uid = 'svc_customs'; risk(0.44); paintRail(); } }
+      ]
+    },
+    {
+      cmd: "SELECT bol, container, vessel, consignee, final_delivery FROM bills_of_lading WHERE final_delivery ILIKE '%HALLOWELL%';",
+      ps1: 'manifests=&gt; ',
+      out: [
+        { t: 'pause', ms: 380 },
+        '<span class="c-dim">      bol       |  container   |        vessel        |     consignee      |     final_delivery</span>',
+        '<span class="c-dim">----------------+--------------+----------------------+--------------------+------------------------</span>',
+        ' <span class="c-hi">' + MANIFEST.bol + '</span> | ' + MANIFEST.container + ' | ' + MANIFEST.vessel + ' | ' + MANIFEST.consignee + ' | <span class="c-warn">' + MANIFEST.finalDelivery + '</span>',
+        '(1 row)',
+        '',
+        '<span class="c-ok">[+]</span> one container. one address. <span class="c-hi">the house.</span>',
+        { t: 'fn', f: () => { rail.loot.push(['bills_of_lading', '1 row']); paintRail(); } },
+        { t: 'cue', evt: 'phase', data: 2 }
+      ]
+    },
+    {
+      cmd: "SELECT lot, declared_desc, length(annex_blob) AS enc FROM manifest_lines WHERE bol='" + MANIFEST.bol + "';",
+      ps1: 'manifests=&gt; ',
+      out: [
+        '<span class="c-dim">   lot    |        declared_desc         | enc</span>',
+        '<span class="c-dim">----------+------------------------------+------</span>',
+        ' HC-0114  | MARBLE OFFCUT, CRATED        |  512',
+        ' HC-0118  | MARBLE OFFCUT, CRATED        |  512',
+        ' HC-0122  | PAPER WASTE, BALED           |  512',
+        ' HC-0130  | STONE SAMPLES                |  512',
+        ' HC-0141  | SCRAP NON-FERROUS            |  512',
+        ' HC-0155  | SCRAP NON-FERROUS            |  512',
+        ' HC-0161  | PACKING TIMBER               |  512',
+        '(7 rows)',
+        '',
+        '<span class="c-warn">[!]</span> every line carries a 512-byte encrypted annex. The customs copy is a lie',
+        '<span class="c-dim">    and the truth is bolted to the same row.</span>',
+        { t: 'fn', f: () => { risk(0.58); paintRail(); } }
+      ]
+    },
+    {
+      cmd: 'xxd -l 96 loot/annex_HC-0114.bin',
+      out: [
+        { t: 'hex', lines: 6 },
+        '',
+        '<span class="tag">[*]</span> header magic <span class="c-hi">53 61 6c 74 65 64 5f 5f</span> → OpenSSL salted, AES-256-CBC',
+        '<span class="tag">[*]</span> key is not in the database. It is in whoever signed the annex.'
+      ]
+    },
+    {
+      cmd: 'mailsift --mbox loot/agent.mbox --grep "annex|passphrase|key" --last 90d',
+      out: [
+        { t: 'spin', label: 'indexing 41,208 messages', ms: 1400 },
+        '<span class="c-dim">2026-10-02  broker@' + D + '   RE: annex handling</span>',
+        '<span class="c-dim">2026-10-02  &gt; use the usual for the B sheets, do not put it in the system</span>',
+        '<span class="c-dim">2026-10-02  &gt; </span><span class="c-hi">cormorant-strait-114E</span>',
+        '',
+        '<span class="c-ok">[+]</span> passphrase in cleartext, in an email, about not writing it down.',
+        { t: 'fn', f: () => { rail.loot.push(['agent.mbox', '288 MB']); paintRail(); } }
+      ]
+    },
+    {
+      cmd: 'for f in loot/annex_*.bin; do openssl enc -d -aes-256-cbc -pbkdf2 -in "$f" -k "$KEY"; done | jq -c .',
+      out: [
+        { t: 'bar', label: 'decrypting annex b', ms: 2000 },
+        '<span class="c-ok">[+]</span> 7/7 annexes decrypted · 0 mac failures',
+        { t: 'pause', ms: 300 },
+        '<span class="c-dim">{"lot":"HC-0114","actual":"RHYTON, GILT SILVER, LION PROTOME","flag":"RESTRICTED"}</span>',
+        '<span class="c-dim">{"lot":"HC-0118","actual":"FIGURE, MARBLE, CYCLADIC TYPE, 24CM","flag":"RESTRICTED"}</span>',
+        '<span class="c-dim">{"lot":"HC-0122","actual":"PSALTER, VELLUM, 41 LEAVES, ILLUM.","flag":"RESTRICTED"}</span>',
+        '<span class="c-dim">{"lot":"HC-0130","actual":"BI DISCS, JADE, PAIR","flag":"RESTRICTED"}</span>',
+        '<span class="c-dim">{"lot":"HC-0141","actual":"VOTIVE FIGURE, BRONZE, 19CM","flag":"RESTRICTED"}</span>',
+        '<span class="c-dim">{"lot":"HC-0155","actual":"TORC FRAGMENT, GOLD, 88.4G","flag":"RESTRICTED"}</span>',
+        '<span class="c-warn">{"lot":"HC-0161","actual":"CRATE - SEALED, NOT SCANNED","flag":"DARK"}</span>',
+        { t: 'fn', f: () => { rail.loot.push(['annex_b (7)', '3.6 KB']); risk(0.72); paintRail(); } }
+      ]
+    },
+    {
+      cmd: "SELECT * FROM seal_events WHERE container='" + MANIFEST.container + "' ORDER BY ts;",
+      ps1: 'manifests=&gt; ',
+      out: [
+        '<span class="c-dim">        ts         |    event     |             detail</span>',
+        '<span class="c-dim">-------------------+--------------+---------------------------------</span>'
+      ].concat(MANIFEST.chain.map(c =>
+        ' ' + c[0].padEnd(17) + ' | ' + c[1].padEnd(12) + ' | ' +
+        (/SEAL BROKEN|SCRUBBED|GPS ENDS|DUPLICATE/.test(c[1] + c[2]) ? '<span class="c-bad">' + c[2] + '</span>' : c[2])
+      )).concat([
+        '(' + MANIFEST.chain.length + ' rows)',
+        '',
+        '<span class="c-bad">[!!]</span> seal broken at 23:41 with no customs officer on the log.',
+        '<span class="c-bad">[!!]</span> re-sealed 94 minutes later with a duplicate seal number.',
+        '<span class="c-bad">[!!]</span> tracker dies on the driveway and never comes back on.',
+        { t: 'fn', f: () => { rail.loot.push(['seal_events', '7 rows']); risk(0.86); paintRail(); } }
+      ])
+    },
+    {
+      cmd: './build-evidence --bol ' + MANIFEST.bol + ' --annex decrypted --chain full --sign',
+      out: [
+        { t: 'bar', label: 'assembling exhibit', ms: 1500 },
+        '<span class="c-ok">[+]</span> 7 lots · declared vs actual reconciled',
+        '<span class="c-ok">[+]</span> chain of custody · 7 events · 3 flagged',
+        '<span class="c-ok">[+]</span> sha256 sealed · <span class="c-dim">' + VAN.hex(48).toLowerCase().replace(/(.{16})/g, '$1 ') + '</span>',
+        '<span class="c-ok">[+]</span> mirrored to 3 dead drops',
+        '',
+        '<span class="c-hi">    the crates in that basement are on this paper.</span>',
+        '<span class="c-hi">    go get them.</span>',
+        { t: 'fn', f: () => { risk(0.94); paintRail(); showManifest(true); } },
+        { t: 'cue', evt: 'manifest', data: true },
+        { t: 'cue', evt: 'phase', data: 3 }
+      ]
+    }
+  ];
+  VAN.$('#stepsAll').textContent = SCRIPT.length;
+  VAN.$('#tgt').textContent = D;
+
+  /* ---------------- rail ---------------- */
+  const rail = { host: '—', ip: '—', os: '—', acc: null, cred: null, uid: 'ghostline', ports: false, loot: [], risk: 0.06, logw: 0, logs: 0 };
+  function risk(v) { rail.risk = v; }
+  function paintRail() {
+    VAN.$('#r-host').textContent = rail.host;
+    VAN.$('#r-ip').textContent = rail.ip;
+    VAN.$('#r-os').textContent = rail.os;
+    const a = VAN.$('#r-acc'); a.textContent = rail.acc || 'none'; a.className = rail.acc ? 'ok' : 'dim';
+    const c = VAN.$('#r-cred'); c.textContent = rail.cred || 'none'; c.className = rail.cred ? 'hi' : 'dim';
+    VAN.$('#uid').textContent = rail.uid;
+    if (rail.ports) VAN.$('#r-ports').innerHTML = [
+      ['22', 'ssh', 'open'], ['80', 'http', 'open'], ['443', 'https', 'open'],
+      ['3389', 'rdp', 'open'], ['8443', 'edi-gw', 'WEAK'], ['5432', 'postgres', 'WEAK']
+    ].map(p => '<div class="portrow"><span class="' + (p[2] === 'WEAK' ? 'warn' : 'dim') + '">' + p[0] + '</span>' +
+      '<span>' + p[1] + '</span><span class="' + (p[2] === 'WEAK' ? 'warn' : 'dim') + '">' + p[2] + '</span></div>').join('');
+    VAN.$('#r-loot').innerHTML = rail.loot.length
+      ? rail.loot.map(l => '<div class="loot"><span class="ok">↓</span><span>' + l[0] + '</span><span class="sz">' + l[1] + '</span></div>').join('')
+      : '<div class="dim" style="font-size:10.5px">nothing pulled</div>';
+    VAN.$('#r-risk').style.width = Math.round(rail.risk * 100) + '%';
+    VAN.$('#r-risk').parentNode.className = 'meter striped' + (rail.risk > .75 ? ' bad' : rail.risk > .45 ? ' warn' : '');
+  }
+  setInterval(() => {
+    rail.logw += 2 + (Math.random() * 9 | 0);
+    rail.logs = Math.round(rail.logw * 0.94);
+    VAN.$('#r-logw').textContent = rail.logw;
+    VAN.$('#r-logs').textContent = rail.logs;
+  }, 1100);
+
+  /* ---------------- runner ---------------- */
+  let si = 0, ci = 0, running = false, cmdEl = null;
+
+  function ensureCmdLine() {
+    if (!cmdEl) {
+      const st = SCRIPT[si];
+      cmdEl = line((st.ps1 ? '<span class="c-hi">' + st.ps1 + '</span>' : PS1) + '<span class="txt"></span>', 'cmd');
+    }
+    return cmdEl.querySelector('.txt');
+  }
+
+  /** SCRIPT MODE: every keypress emits the next few characters, then runs the stage. */
+  function advance() {
+    if (running) return;
+    if (si >= SCRIPT.length) return;
+    const st = SCRIPT[si];
+    const txt = ensureCmdLine();
+    if (ci < st.cmd.length) {
+      const n = Math.min(st.cmd.length - ci, 2 + (Math.random() * 3 | 0));
+      txt.textContent += st.cmd.slice(ci, ci + n);
+      ci += n;
+      term.scrollTop = term.scrollHeight;
+      return;
+    }
+    runStage(st);
+  }
+
+  async function runStage(st) {
+    running = true;
+    cmdEl = null; ci = 0;
+    for (const o of st.out) {
+      if (typeof o === 'string') { line(o); await sleep(20 + Math.random() * 45); continue; }
+      if (o.t === 'pause') { await sleep(o.ms); continue; }
+      if (o.t === 'fn') { o.f(); continue; }
+      if (o.t === 'cue') { VAN.cue(o.evt, o.data); continue; }
+      if (o.t === 'hex') {
+        const R = Math.random;
+        for (let i = 0; i < o.lines; i++) {
+          let hexs = '', asc = '';
+          for (let b = 0; b < 16; b++) {
+            const v = (R() * 256) | 0;
+            hexs += VAN.pad(v.toString(16), 2) + (b % 2 ? ' ' : '');
+            asc += (v > 32 && v < 127) ? String.fromCharCode(v) : '.';
+          }
+          line('<span class="hexb">' + VAN.pad((i * 16).toString(16), 8) + ': ' + hexs + ' </span><span class="c-dim">' + asc.replace(/</g, '&lt;') + '</span>');
+          await sleep(55);
+        }
+        continue;
+      }
+      if (o.t === 'spin') {
+        const d = line('');
+        const t0 = performance.now();
+        while (performance.now() - t0 < o.ms) {
+          d.innerHTML = '<span class="c-hi">' + SPIN[(performance.now() / 70 | 0) % SPIN.length] + '</span> ' + o.label + ' <span class="c-dim">…</span>';
+          await sleep(60);
+        }
+        d.innerHTML = '<span class="c-ok">✓</span> ' + o.label + ' <span class="c-dim">…</span> <span class="c-ok">done</span>';
+        continue;
+      }
+      if (o.t === 'bar') {
+        const d = line('');
+        const t0 = performance.now();
+        let p = 0;
+        while (p < 1) {
+          p = Math.min(1, (performance.now() - t0) / o.ms);
+          const eased = p < 1 ? p * (0.75 + Math.random() * 0.25) : 1;
+          d.innerHTML = bar(eased) + '  <span class="c-dim">' + o.label + '</span>';
+          await sleep(55);
+        }
+        d.innerHTML = bar(1) + '  <span class="c-dim">' + o.label + '</span>  <span class="c-ok">OK</span>';
+        continue;
+      }
+    }
+    line('');
+    si++;
+    VAN.$('#steps').textContent = si;
+    VAN.$('#s-stage').textContent = si;
+    running = false;
+    term.scrollTop = term.scrollHeight;
+  }
+
+  /* ---------------- live mode ---------------- */
+  let mode = 'SCRIPT';
+  const input = VAN.$('#input');
+  let liveBuf = '', liveEl = null;
+
+  const HELP = [
+    'ghostline shell — available:',
+    '  <span class="c-hi">run</span>        play the whole intrusion, stage after stage',
+    '  <span class="c-hi">next</span>       advance one stage',
+    '  <span class="c-hi">scan</span>       port sweep ' + D,
+    '  <span class="c-hi">creds</span>      show recovered credentials',
+    '  <span class="c-hi">manifest</span>   open the decrypted bill of lading',
+    '  <span class="c-hi">chain</span>      chain of custody for ' + MANIFEST.container,
+    '  <span class="c-hi">trace</span>      last known position of truck 7742',
+    '  <span class="c-hi">whoami</span> · <span class="c-hi">clear</span> · <span class="c-hi">reset</span> · <span class="c-hi">help</span>'
+  ];
+
+  function livePrompt() {
+    liveEl = line(PS1 + '<span class="txt"></span><span id="cursor"></span>', 'cmd');
+    liveBuf = '';
+  }
+  function liveRender() {
+    if (liveEl) liveEl.querySelector('.txt').textContent = liveBuf;
+    term.scrollTop = term.scrollHeight;
+  }
+  async function liveRun(raw) {
+    const c = raw.trim().toLowerCase();
+    const cur = VAN.$('#cursor'); if (cur) cur.remove();
+    if (!c) { livePrompt(); return; }
+    if (c === 'help' || c === '?') HELP.forEach(h => line(h));
+    else if (c === 'clear') term.textContent = '';
+    else if (c === 'whoami') line(rail.uid + '  <span class="c-dim">(' + (rail.acc || 'unprivileged') + ')</span>');
+    else if (c === 'creds') line(rail.cred ? '<span class="c-hi">' + rail.cred + '</span>' : '<span class="c-dim">nothing recovered yet — run the intrusion first</span>');
+    else if (c === 'manifest') { if (VAN.state.manifest || si >= SCRIPT.length) showManifest(true); else line('<span class="c-bad">annex b is still encrypted.</span> <span class="c-dim">get the passphrase first.</span>'); }
+    else if (c === 'chain') MANIFEST.chain.forEach(x => line(' <span class="c-dim">' + x[0] + '</span>  <span class="c-hi">' + x[1] + '</span>  ' + x[2]));
+    else if (c === 'trace') {
+      line('<span class="tag">[*]</span> truck 7742 · last fix 13 NOV 05:52:11');
+      line('<span class="tag">[*]</span> 41.0184 N  73.7649 W  ± 4 m');
+      line('<span class="c-warn">[!]</span> ' + MANIFEST.finalDelivery + ' — service entrance');
+      line('<span class="c-dim">    tracker powered down on site. no further fixes.</span>');
+    }
+    else if (c === 'scan') { livePromptOff(); await runStage(SCRIPT[0]); }
+    else if (c === 'next') { if (si < SCRIPT.length) { livePromptOff(); const st = SCRIPT[si]; line((st.ps1 ? '<span class="c-hi">' + st.ps1 + '</span>' : PS1) + st.cmd, 'cmd'); await runStage(st); } else line('<span class="c-dim">no stages left. type reset.</span>'); }
+    else if (c === 'run') { livePromptOff(); while (si < SCRIPT.length) { const st = SCRIPT[si]; line((st.ps1 ? '<span class="c-hi">' + st.ps1 + '</span>' : PS1) + st.cmd, 'cmd'); await runStage(st); } }
+    else if (c === 'reset') { resetAll(); return; }
+    else line('<span class="c-bad">-bash: ' + raw.trim().split(' ')[0].replace(/</g, '&lt;') + ': command not found</span>');
+    livePrompt();
+  }
+  function livePromptOff() { if (liveEl) { const cur = VAN.$('#cursor'); if (cur) cur.remove(); } }
+
+  input.addEventListener('keydown', async e => {
+    if (mode !== 'LIVE') return;
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === 'Enter') { e.preventDefault(); const b = liveBuf; liveRender(); await liveRun(b); return; }
+    if (e.key === 'Backspace') { e.preventDefault(); liveBuf = liveBuf.slice(0, -1); liveRender(); return; }
+    if (e.key.length === 1) { e.preventDefault(); liveBuf += e.key; liveRender(); }
+  });
+
+  function setMode(m) {
+    mode = m;
+    VAN.$('#s-mode').textContent = m;
+    const chip = VAN.$('#modechip');
+    chip.textContent = m + ' MODE';
+    chip.className = 'chip modechip ' + (m === 'SCRIPT' ? 'on' : 'warn');
+    if (m === 'LIVE') { input.focus(); livePrompt(); }
+    else { livePromptOff(); const cur = VAN.$('#cursor'); if (cur) cur.remove(); input.blur(); }
+  }
+
+  /* ---------------- manifest overlay ---------------- */
+  function buildManifest() {
+    VAN.$('#m-bol').textContent = MANIFEST.bol;
+    VAN.$('#m-shipper').textContent = FICTION.shipper;
+    VAN.$('#m-grid').innerHTML = [
+      ['Container', MANIFEST.container], ['Seal', MANIFEST.seal + '  (duplicate)'],
+      ['Vessel', MANIFEST.vessel], ['Voyage', MANIFEST.voyage],
+      ['Load port', MANIFEST.loadPort], ['Discharge', MANIFEST.dischargePort],
+      ['Consignee', MANIFEST.consignee], ['Notify', MANIFEST.notify],
+      ['Declared', MANIFEST.declared], ['Declared wt', MANIFEST.declaredWeight],
+      ['Actual wt', MANIFEST.actualWeight], ['Final delivery', MANIFEST.finalDelivery]
+    ].map(([k, v]) => '<div><span>' + k + '</span><b>' + v + '</b></div>').join('');
+    VAN.$('#m-table').innerHTML =
+      '<thead><tr><th>Lot</th><th>Declared to customs</th><th>Actual contents</th>' +
+      '<th class="num">Qty</th><th class="num">KG</th><th class="num">Value USD</th><th>Flag</th></tr></thead><tbody>' +
+      MANIFEST.lines.map(l =>
+        '<tr><td class="hi">' + l.lot + '</td><td class="strike">' + l.declared + '</td>' +
+        '<td class="hi">' + l.actual + '</td><td class="num">' + l.qty + '</td>' +
+        '<td class="num">' + l.kg.toFixed(1) + '</td><td class="num">' + l.val + '</td>' +
+        '<td><span class="m-flag' + (l.flag === 'DARK' ? ' dark' : '') + '">' + l.flag + '</span></td></tr>').join('') +
+      '</tbody>';
+    VAN.$('#m-chain').innerHTML = MANIFEST.chain.map(c => {
+      const bad = /SEAL BROKEN|SCRUBBED|GPS ENDS|DUPLICATE|NO CUSTOMS/.test(c[1] + c[2]);
+      return '<div class="t">' + c[0] + '</div><div class="e' + (bad ? ' bad' : '') + '">' + c[1] + '</div>' +
+             '<div class="' + (bad ? 'bad' : '') + '">' + c[2] + '</div>';
+    }).join('');
+  }
+  function showManifest(on) {
+    VAN.$('#manifest').classList.toggle('on', on);
+    VAN.$('#s-man').textContent = on ? 'OPEN' : 'SEALED';
+    VAN.$('#s-man').className = on ? 'hi' : 'dim';
+  }
+  buildManifest();
+
+  /* ---------------- reset ---------------- */
+  function resetAll() {
+    term.textContent = '';
+    si = 0; ci = 0; running = false; cmdEl = null;
+    rail.acc = null; rail.cred = null; rail.uid = 'ghostline'; rail.ports = false;
+    rail.loot = []; rail.risk = 0.06; rail.logw = 0;
+    paintRail(); showManifest(false);
+    VAN.$('#steps').textContent = '0'; VAN.$('#s-stage').textContent = '0';
+    VAN.cue('phase', 0); VAN.cue('manifest', false);
+    banner();
+    if (mode === 'LIVE') livePrompt();
+  }
+
+  function banner() {
+    [
+      '<span class="c-dim">' + FICTION.van + ' · ' + FICTION.address.replace(/\d+/, '—') + ' · ENGINE OFF</span>',
+      '',
+      '<span class="c-hi">  ____  _   _   ___   ____  _____ _      ___  _   _  _____ </span>',
+      '<span class="c-hi"> / ___|| | | | / _ \\ / ___||_   _| |    |_ _|| \\ | || ____|</span>',
+      '<span class="c-hi">| |  _ | |_| || | | |\\___ \\  | | | |     | | |  \\| ||  _|  </span>',
+      '<span class="c-hi">| |_| ||  _  || |_| | ___) | | | | |___  | | | |\\  || |___ </span>',
+      '<span class="c-hi"> \\____||_| |_| \\___/ |____/  |_| |_____||___||_| \\_||_____|</span>',
+      '',
+      '<span class="c-dim">  exit node  </span>ams-04<span class="c-dim">  →  </span>fra-11<span class="c-dim">  →  </span>lis-02<span class="c-dim">   · no logs · 47 ms</span>',
+      '<span class="c-dim">  objective  </span>' + FICTION.shipper,
+      '<span class="c-dim">  for        </span><span class="c-hi">' + FICTION.partner + '</span>',
+      '',
+      '<span class="c-warn">  ' + SCRIPT.length + ' stages queued. mash the keyboard.</span>',
+      ''
+    ].forEach(l => line(l));
+  }
+
+  /* ---------------- keys ---------------- */
+  window.addEventListener('keydown', e => {
+    if (mode !== 'SCRIPT') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key;
+    if (k === '`' || k === 'm' || k === 'M' || k === '\\' || k === '?' || k === '/' ||
+        k === 'Escape' || k === 'Tab' || k.startsWith('Arrow') || k === 'PageUp' || k === 'PageDown' ||
+        (k.length === 1 && '12345axbtgf'.includes(k.toLowerCase()))) return;   // reserved for the director
+    e.preventDefault();
+    advance();
+  });
+
+  VAN.keys({
+    '`': () => setMode(mode === 'SCRIPT' ? 'LIVE' : 'SCRIPT'),
+    'm': () => showManifest(!VAN.$('#manifest').classList.contains('on')),
+    '\\': () => resetAll()
+  });
+
+  VAN.on('manifest', v => showManifest(!!v));
+  paintRail();
+  banner();
+  setMode('SCRIPT');
+})();
+</script>
+</body>
+</html>
