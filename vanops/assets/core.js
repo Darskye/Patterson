@@ -131,6 +131,7 @@
     try { localStorage.setItem(MSG_KEY, raw); } catch (e) { }
     // popup / opener chain — the only transport that survives file:// origins
     try { if (global.opener && !global.opener.closed) global.opener.postMessage({ __vanops: msg }, '*'); } catch (e) { }
+    try { if (global.parent && global.parent !== global) global.parent.postMessage({ __vanops: msg }, '*'); } catch (e) { }
     VAN._children = VAN._children.filter(w => { try { return w && !w.closed; } catch (e) { return false; } });
     VAN._children.forEach(w => { try { w.postMessage({ __vanops: msg }, '*'); } catch (e) { } });
   }

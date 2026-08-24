@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="phosphor">
+<head>
+<meta charset="utf-8">
+<title>VAN OPS · WALL PREVIEW</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="vendor/augmented-ui.min.css">
+<link rel="stylesheet" href="assets/core.css">
+<style>
+  .wall { display: grid; gap: 6px; min-height: 0; }
+  .slot { position: relative; overflow: hidden; border: 1px solid var(--line); background: #04070a; min-height: 0; }
+  .slot:focus-within, .slot.hot { border-color: var(--hi); box-shadow: 0 0 0 1px var(--hi); }
+  .slot iframe { position: absolute; top: 0; left: 0; border: 0; transform-origin: 0 0; }
+  .slot .tag {
+    position: absolute; top: 0; left: 0; z-index: 3; pointer-events: none;
+    padding: 2px 8px; font-size: 9px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--bg); background: var(--hi);
+  }
+  .slot .hint { position: absolute; inset: 0; z-index: 2; }
+</style>
+</head>
+<body>
+<div class="viewport">
+  <header class="topbar" data-augmented-ui="tl-clip br-clip border">
+    <span class="brand">VAN OPS<small> /WALL PREVIEW</small></span>
+    <span class="sep"></span>
+    <span class="label">SHOWING</span><span class="val" id="count">—</span>
+    <span class="sep"></span>
+    <span class="dim">SETUP TOOL — on the day, run ONE screen per monitor, fullscreen</span>
+    <span class="spacer"></span>
+    <div class="phasestrip" data-auto></div>
+    <span class="sep"></span>
+    <span class="hi tabular" data-van="clock">00:00:00</span>
+  </header>
+
+  <main class="stage"><div class="wall" id="wall"></div></main>
+
+  <footer class="statusbar">
+    <span>PHASE <b class="hi" data-van="phase">RECON</b></span>
+    <span>CLICK A PANE THEN PRESS <b>1-5</b> — WATCH THE OTHERS FOLLOW</span>
+    <span class="spacer"></span>
+    <span class="dim">?screens=schematic,cameras,terminal TO PICK · [1-5] PHASE · [A] ALARM · [T] THEME</span>
+  </footer>
+</div>
+
+<script src="assets/core.js"></script>
+<script>
+(function () {
+  'use strict';
+  VAN.helpExtra = [['?screens=…', 'URL filter, e.g. wall.html?screens=schematic,cameras,terminal']];
+  VAN.init({ name: 'WALL', code: 'W-00' });
+
+  const ALL = ['schematic', 'cameras', 'terminal', 'netmap', 'keycrack', 'systems', 'comms', 'trace', 'stream'];
+  const want = (new URLSearchParams(location.search).get('screens') || '').split(',').map(s => s.trim()).filter(Boolean);
+  const list = want.length ? want.filter(s => ALL.includes(s)) : ALL;
+  VAN.$('#count').textContent = list.length + ' / ' + ALL.length;
+
+  const cols = list.length <= 2 ? list.length : list.length <= 4 ? 2 : 3;
+  const rows = Math.ceil(list.length / cols);
+  const wall = VAN.$('#wall');
+  wall.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0,1fr))';
+  wall.style.gridTemplateRows = 'repeat(' + rows + ', minmax(0,1fr))';
+
+  // Each pane renders at a real 1920x1080 and is scaled down, so layouts look
+  // exactly like they will on the monitor rather than reflowing to a small box.
+  const W = 1920, H = 1080;
+  list.forEach(name => {
+    const slot = VAN.el('div', 'slot');
+    slot.dataset.name = name;
+    const f = document.createElement('iframe');
+    f.src = 'screens/' + name + '.html';
+    f.width = W; f.height = H;
+    slot.appendChild(f);
+    slot.insertAdjacentHTML('beforeend', '<span class="tag">' + name + '</span>');
+    wall.appendChild(slot);
+  });
+
+  function fit() {
+    VAN.$$('.slot').forEach(s => {
+      const r = s.getBoundingClientRect();
+      const k = Math.min(r.width / W, r.height / H);
+      const f = s.querySelector('iframe');
+      f.style.transform = 'scale(' + k + ') translate(' +
+        ((r.width / k - W) / 2).toFixed(1) + 'px,' + ((r.height / k - H) / 2).toFixed(1) + 'px)';
+    });
+  }
+  new ResizeObserver(fit).observe(wall);
+  setTimeout(fit, 60);
+
+  // star relay: a cue from any pane is echoed to all the others, so the wall moves as one
+  window.addEventListener('message', e => {
+    const d = e.data;
+    if (!d || !d.__vanops) return;
+    VAN.$$('.slot iframe').forEach(f => {
+      if (f.contentWindow && f.contentWindow !== e.source) {
+        try { f.contentWindow.postMessage(d, '*'); } catch (err) {}
+      }
+    });
+  });
+
+  // clicking a pane hands the keyboard to that screen, like walking up to that monitor
+  wall.addEventListener('mousedown', e => {
+    const s = e.target.closest('.slot');
+    VAN.$$('.slot').forEach(x => x.classList.toggle('hot', x === s));
+    if (s) setTimeout(() => { try { s.querySelector('iframe').contentWindow.focus(); } catch (err) {} }, 0);
+  });
+})();
+</script>
+</body>
+</html>

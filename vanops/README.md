@@ -21,6 +21,12 @@ card to open that screen in its own window, drag the window to the display you w
 > screen-to-screen messaging on `file://`, so the monitors won't move together. Use the
 > server if you want the wall to react as one.
 
+**`wall.html`** shows every screen at once on a single display — for checking the whole
+rig before the shoot, or driving a rehearsal off one laptop. Click a pane to hand it the
+keyboard, then press `1`-`5` and watch the others follow. Narrow it with
+`wall.html?screens=schematic,cameras,terminal`. It's a setup tool: on the day, run one
+screen per monitor, fullscreen.
+
 ---
 
 ## The one thing to know
@@ -118,6 +124,7 @@ To redraw a room, change its `x, y, w, h` in `FLOORS`. The plan is a 1000 × 700
 
 ```
 index.html          the console / launcher
+wall.html           all nine on one display, for setup and rehearsal
 screens/            the nine monitors
 assets/core.css     design tokens, panel chrome, CRT overlay
 assets/core.js      cue bus, keymap, shared animation loop
