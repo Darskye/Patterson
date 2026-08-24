@@ -1,0 +1,809 @@
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DTI Tile Grid</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════ tokens */
+:root{
+  --bone:#EDEDE8; --bone2:#E2E2DC; --bone3:#D5D5CE;
+  --ink:#111213; --ink2:#1B1D1F; --ink3:#292C2E;
+  --kiln:#FF4D18; --grey:#83867F;
+  --line:rgba(17,18,19,.15); --lined:rgba(237,237,232,.16);
+  --ff:"Archivo",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --pad:clamp(16px,3.4vw,52px);
+  --e:cubic-bezier(.16,1,.3,1);
+  --snap:cubic-bezier(.6,0,.2,1);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--bone);color:var(--ink);font-family:var(--ff);font-weight:400;
+  line-height:1.55;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+button,input,textarea,select{font:inherit;color:inherit}
+::selection{background:var(--kiln);color:var(--bone)}
+figure{margin:0}
+
+/* ══════════════════════════════════════════════ type */
+h1,h2,h3,h4{margin:0;font-weight:800;line-height:.94;letter-spacing:-.035em}
+.d1{font-size:clamp(2.9rem,8.6vw,8.4rem);font-weight:900;letter-spacing:-.045em}
+.d2{font-size:clamp(2.1rem,5.4vw,4.9rem);font-weight:800}
+.d3{font-size:clamp(1.4rem,2.6vw,2.35rem);font-weight:700;letter-spacing:-.025em}
+.lbl{font-family:var(--mono);font-size:.63rem;font-weight:500;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--grey)}
+.lbl--k{color:var(--kiln)}
+.txt{font-size:1rem;line-height:1.68;color:#3D4043;max-width:60ch}
+.txt--s{font-size:.9rem;line-height:1.62}
+.on-dark .txt{color:#A7ABA6}
+.hl{color:var(--kiln)}
+
+/* ══════════════════════════════════════════════ reveal */
+[data-r]{opacity:0;transition:opacity .8s var(--e),transform .8s var(--e)}
+[data-r="up"]{transform:translateY(34px)}
+[data-r="in"]{transform:scale(.965)}
+[data-r="l"]{transform:translateX(-26px)}
+[data-r].on{opacity:1;transform:none}
+.drawline{transform:scaleX(0);transform-origin:0 50%;transition:transform 1.05s var(--e)}
+.drawline.on{transform:scaleX(1)}
+@media(prefers-reduced-motion:reduce){
+  [data-r]{opacity:1!important;transform:none!important}
+  .drawline{transform:none!important}
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+/* ══════════════════════════════════════════════ nav */
+.nav{position:fixed;inset:0 0 auto;z-index:900;display:grid;
+  grid-template-columns:auto 1fr auto;align-items:stretch;
+  background:var(--bone);border-bottom:1px solid var(--ink);
+  transition:transform .5s var(--snap)}
+.nav.hide{transform:translateY(-101%)}
+.brand{display:flex;align-items:center;gap:11px;padding:11px var(--pad);
+  border-right:1px solid var(--ink)}
+.brand svg{width:32px;height:32px;color:var(--ink);flex:none}
+.brand .hb-t{fill:var(--bone)}.brand .hb-a{fill:var(--kiln)}
+.brand b{font-size:1.08rem;font-weight:900;letter-spacing:-.045em;line-height:1;display:block}
+.brand s{display:block;text-decoration:none;font-family:var(--mono);font-size:.5rem;
+  letter-spacing:.14em;color:var(--grey);margin-top:3px}
+.nav__mid{display:flex;align-items:center;gap:clamp(10px,1.8vw,26px);padding:0 var(--pad)}
+.nav__mid a{font-family:var(--mono);font-size:.66rem;font-weight:500;letter-spacing:.1em;
+  text-transform:uppercase;position:relative;padding:5px 0;transition:color .3s}
+.nav__mid a::before{content:"";position:absolute;left:0;right:0;bottom:0;height:2px;
+  background:var(--kiln);transform:scaleX(0);transform-origin:0 50%;
+  transition:transform .35s var(--snap)}
+.nav__mid a:hover{color:var(--kiln)}
+.nav__mid a:hover::before{transform:scaleX(1)}
+.nav__r{display:flex;align-items:stretch}
+.nav__tel{display:flex;align-items:center;padding:0 22px;border-left:1px solid var(--ink);
+  font-family:var(--mono);font-size:.8rem;font-weight:500;white-space:nowrap}
+.nav__cta{display:flex;align-items:center;gap:.6em;padding:0 26px;background:var(--kiln);
+  color:var(--bone);font-family:var(--mono);font-size:.66rem;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;position:relative;overflow:hidden;white-space:nowrap}
+.nav__cta span{position:relative;z-index:1}
+.nav__cta::before{content:"";position:absolute;inset:0;background:var(--ink);
+  transform:translateY(101%);transition:transform .4s var(--snap)}
+.nav__cta:hover::before{transform:none}
+.burger{display:none;width:52px;border:0;border-left:1px solid var(--ink);background:none;
+  cursor:pointer;place-items:center}
+.burger i{width:16px;height:2px;background:var(--ink);display:block;position:relative}
+.burger i::before,.burger i::after{content:"";position:absolute;left:0;width:16px;height:2px;
+  background:var(--ink);transition:transform .35s var(--snap)}
+.burger i::before{top:-5px}.burger i::after{top:5px}
+body.menu .burger i{background:transparent}
+body.menu .burger i::before{transform:translateY(5px) rotate(45deg)}
+body.menu .burger i::after{transform:translateY(-5px) rotate(-45deg)}
+.sheet{position:fixed;inset:56px 0 0;z-index:880;background:var(--ink);color:var(--bone);
+  padding:26px var(--pad);display:flex;flex-direction:column;justify-content:space-between;
+  clip-path:inset(0 0 100% 0);transition:clip-path .55s var(--snap);visibility:hidden}
+body.menu .sheet{clip-path:inset(0 0 0 0);visibility:visible}
+.sheet a.big{font-size:clamp(1.8rem,8vw,3rem);font-weight:800;letter-spacing:-.035em;display:block;
+  padding:10px 0;border-bottom:1px solid var(--lined)}
+
+/* ══════════════════════════════════════════════ segmented progress */
+.segs{position:fixed;top:0;left:0;right:0;height:3px;z-index:950;display:flex;gap:2px;
+  padding:0 2px;pointer-events:none}
+.segs i{flex:1;background:rgba(17,18,19,.13);position:relative;overflow:hidden}
+.segs i::after{content:"";position:absolute;inset:0;background:var(--kiln);
+  transform:scaleX(var(--f,0));transform-origin:0 50%;transition:transform .18s linear}
+
+/* ══════════════════════════════════════════════ hero */
+.hero{padding-top:57px;border-bottom:1px solid var(--ink)}
+.hero__g{display:grid;grid-template-columns:1fr}
+@media(min-width:940px){.hero__g{grid-template-columns:1.06fr .94fr}}
+.hero__l{padding:clamp(28px,5.4vw,72px) var(--pad);display:flex;flex-direction:column;
+  justify-content:space-between;gap:34px;position:relative;overflow:hidden}
+.hero__l::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:clamp(48px,6vw,84px) clamp(48px,6vw,84px)}
+.hero__l>*{position:relative}
+.hero h1{margin:14px 0 0}
+.hero h1 .ln{display:block;overflow:hidden}
+.hero h1 .ln>i{display:block;font-style:normal;transform:translateY(105%);
+  transition:transform .95s var(--e)}
+.hero.go h1 .ln>i{transform:none}
+.hero h1 .ln:nth-child(2)>i{transition-delay:.09s}
+.hero h1 .ln:nth-child(3)>i{transition-delay:.18s}
+.hero__tags{display:flex;flex-wrap:wrap;gap:7px;margin-top:24px}
+.hero__tags i{font-style:normal;font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;
+  text-transform:uppercase;border:1px solid var(--ink);padding:6px 11px}
+.hero__r{position:relative;min-height:clamp(320px,52vh,660px);overflow:hidden;
+  border-top:1px solid var(--ink)}
+@media(min-width:940px){.hero__r{border-top:0;border-left:1px solid var(--ink)}}
+.hero__r img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  transform:scale(1.1);transition:transform 1.7s var(--e)}
+.hero.go .hero__r img{transform:none}
+.hero__stamp{position:absolute;right:0;bottom:0;background:var(--kiln);color:var(--bone);
+  padding:15px 20px;font-family:var(--mono);font-size:.62rem;letter-spacing:.1em;
+  text-transform:uppercase;max-width:74%}
+.hero__stamp b{display:block;font-family:var(--ff);font-size:1.5rem;font-weight:900;
+  letter-spacing:-.035em;line-height:1;margin-bottom:5px}
+.btnrow{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--ink);width:fit-content;
+  max-width:100%}
+.btnrow a{padding:15px 24px;font-family:var(--mono);font-size:.66rem;font-weight:500;
+  letter-spacing:.1em;text-transform:uppercase;position:relative;overflow:hidden;
+  border-right:1px solid var(--ink);transition:color .35s}
+.btnrow a:last-child{border-right:0}
+.btnrow a span{position:relative;z-index:1}
+.btnrow a::before{content:"";position:absolute;inset:0;background:var(--ink);
+  transform:translateY(101%);transition:transform .42s var(--snap)}
+.btnrow a:hover{color:var(--bone)}
+.btnrow a:hover::before{transform:none}
+.btnrow a.k{background:var(--kiln);color:var(--bone)}
+
+/* ══════════════════════════════════════════════ ticker */
+.tick{background:var(--ink);color:var(--bone);overflow:hidden;display:flex;
+  white-space:nowrap;border-bottom:1px solid var(--ink);user-select:none}
+.tick__t{display:flex;animation:mv 30s linear infinite;flex:none}
+.tick:hover .tick__t{animation-play-state:paused}
+.tick span{font-family:var(--mono);font-size:.72rem;font-weight:500;letter-spacing:.14em;
+  text-transform:uppercase;padding:12px 0;display:flex;align-items:center;gap:22px;
+  margin-right:22px;flex:none}
+.tick span::after{content:"◆";color:var(--kiln);font-size:.6rem}
+@keyframes mv{to{transform:translateX(-50%)}}
+
+/* ══════════════════════════════════════════════ section chrome */
+.sec{padding:clamp(48px,8vh,110px) var(--pad);border-bottom:1px solid var(--ink)}
+.sec--d{background:var(--ink);color:var(--bone);border-bottom-color:var(--lined)}
+.wrap{max-width:1680px;margin:0 auto}
+.shead{display:flex;flex-wrap:wrap;gap:18px 46px;align-items:flex-end;
+  justify-content:space-between;margin-bottom:clamp(26px,4.4vh,54px)}
+.shead__n{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.shead__n b{background:var(--kiln);color:var(--bone);font-family:var(--mono);font-size:.62rem;
+  font-weight:700;padding:4px 8px;letter-spacing:.08em}
+.hrule{height:1px;background:var(--ink);border:0;margin:0}
+.sec--d .hrule{background:var(--lined)}
+
+/* ══════════════════════════════════════════════ bento */
+.bento{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--ink);
+  border:1px solid var(--ink)}
+@media(min-width:900px){.bento{grid-template-columns:repeat(4,1fr)}}
+.bx{background:var(--bone);padding:clamp(20px,2.3vw,30px);min-height:172px;display:flex;
+  flex-direction:column;justify-content:space-between;gap:16px;position:relative;
+  overflow:hidden;transition:background-color .4s var(--snap),color .4s var(--snap)}
+.bx:hover{background:var(--kiln);color:var(--bone)}
+.bx:hover .lbl,.bx:hover .txt{color:rgba(237,237,232,.85)}
+.bx b{font-size:clamp(1.6rem,2.9vw,2.5rem);font-weight:900;letter-spacing:-.04em;
+  line-height:.95;display:block}
+.bx--w{grid-column:span 2}
+.bx--img{padding:0;min-height:230px}
+.bx--img img{width:100%;height:100%;object-fit:cover;filter:grayscale(.15);
+  transition:transform 1.1s var(--e),filter .6s}
+.bx--img:hover img{transform:scale(1.055);filter:none}
+.bx--img figcaption{position:absolute;left:0;bottom:0;background:var(--bone);
+  padding:9px 14px;font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;
+  text-transform:uppercase}
+.bx--k{background:var(--kiln);color:var(--bone)}
+.bx--k:hover{background:var(--ink)}
+.bx--k .lbl{color:rgba(237,237,232,.8)}
+.bx--ink{background:var(--ink);color:var(--bone)}
+.bx--ink:hover{background:var(--kiln)}
+.bx--cta__go{transition:transform .4s var(--snap);display:inline-block}
+.bx--cta:hover .bx--cta__go{transform:translateX(6px);color:var(--bone)}
+.bx--ink .lbl{color:var(--grey)}
+.bx--ink .txt{color:#A7ABA6}
+
+/* ══════════════════════════════════════════════ work grid */
+.wg{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--ink);
+  border:1px solid var(--ink)}
+@media(min-width:820px){.wg{grid-template-columns:repeat(3,1fr)}}
+.wk{position:relative;background:var(--bone);overflow:hidden;aspect-ratio:4/3;display:block}
+.wk img{width:100%;height:100%;object-fit:cover;filter:grayscale(.85) contrast(1.03);
+  transition:filter .55s var(--snap),transform 1.2s var(--e)}
+.wk:hover img{filter:none;transform:scale(1.05)}
+.wk__m{position:absolute;inset:auto 0 0 0;background:var(--bone);padding:13px 16px;
+  display:flex;justify-content:space-between;align-items:baseline;gap:10px;
+  transform:translateY(0);transition:background-color .4s,color .4s}
+.wk:hover .wk__m{background:var(--kiln);color:var(--bone)}
+.wk:hover .wk__m .lbl{color:rgba(237,237,232,.85)}
+.wk__m b{font-size:.98rem;font-weight:700;letter-spacing:-.015em}
+.wk__i{position:absolute;top:0;left:0;background:var(--ink);color:var(--bone);
+  font-family:var(--mono);font-size:.58rem;padding:5px 9px;letter-spacing:.08em;z-index:2}
+
+/* ══════════════════════════════════════════════ big numbers */
+.nums{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--lined);
+  border:1px solid var(--lined)}
+@media(min-width:900px){.nums{grid-template-columns:repeat(4,1fr)}}
+.nm{background:var(--ink);padding:clamp(22px,3vw,40px)}
+.nm b{font-size:clamp(2.6rem,6.4vw,5.2rem);font-weight:900;letter-spacing:-.05em;
+  display:block;line-height:.9;font-variant-numeric:tabular-nums}
+.nm span{display:block;margin-top:12px}
+
+/* ══════════════════════════════════════════════ process stepper */
+.step2{display:grid;grid-template-columns:1fr;gap:1px;background:var(--line);
+  border:1px solid var(--ink)}
+@media(min-width:760px){.step2{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:1200px){.step2{grid-template-columns:repeat(4,1fr)}}
+.st{background:var(--bone);padding:clamp(20px,2.4vw,32px);position:relative;
+  transition:background-color .45s var(--snap)}
+.st:hover{background:var(--bone2)}
+.st__bar{height:3px;background:var(--bone3);margin-bottom:18px;overflow:hidden}
+.st__bar i{display:block;height:100%;background:var(--kiln);transform:scaleX(0);
+  transform-origin:0 50%;transition:transform .9s var(--e)}
+.st.on .st__bar i{transform:scaleX(1)}
+.st h3{font-size:1.24rem;margin:9px 0 10px;font-weight:700;letter-spacing:-.02em}
+.st__fig{margin-top:18px;aspect-ratio:16/10;overflow:hidden;background:var(--bone3)}
+.st__fig img{width:100%;height:100%;object-fit:cover;filter:grayscale(.7);
+  transition:filter .6s,transform 1.1s var(--e)}
+.st:hover .st__fig img{filter:none;transform:scale(1.05)}
+
+/* ══════════════════════════════════════════════ spec table */
+.spec{border:1px solid var(--lined)}
+.spec__r{display:grid;grid-template-columns:1fr;gap:0;border-bottom:1px solid var(--lined)}
+@media(min-width:760px){.spec__r{grid-template-columns:.3fr .46fr .24fr}}
+.spec__r:last-child{border-bottom:0}
+.spec__r>*{padding:16px clamp(14px,1.8vw,24px)}
+.spec__r>*+*{border-top:1px solid var(--lined)}
+@media(min-width:760px){.spec__r>*+*{border-top:0;border-left:1px solid var(--lined)}}
+.spec__r b{font-size:1rem;font-weight:700;letter-spacing:-.015em}
+.spec__v{font-family:var(--mono);font-size:.8rem;color:var(--kiln);font-weight:500}
+.spec__hd{background:var(--ink3)}
+.spec__hd>*{padding-top:11px;padding-bottom:11px}
+
+/* ══════════════════════════════════════════════ materials strip */
+.mats{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--ink);
+  border:1px solid var(--ink)}
+@media(min-width:860px){.mats{grid-template-columns:repeat(4,1fr)}}
+.mat{position:relative;aspect-ratio:1/1;overflow:hidden;background:var(--bone)}
+.mat img{width:100%;height:100%;object-fit:cover;transition:transform 1.2s var(--e)}
+.mat:hover img{transform:scale(1.08)}
+.mat__l{position:absolute;left:0;right:0;bottom:0;background:var(--bone);padding:11px 14px;
+  display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mat__l b{font-size:.94rem;font-weight:700;letter-spacing:-.015em}
+
+/* ══════════════════════════════════════════════ voices */
+.vg{display:grid;grid-template-columns:1fr;gap:1px;background:var(--ink);
+  border:1px solid var(--ink)}
+@media(min-width:860px){.vg{grid-template-columns:repeat(3,1fr)}}
+.vv{background:var(--bone);padding:clamp(22px,2.6vw,34px);transition:background-color .4s}
+.vv:hover{background:var(--kiln);color:var(--bone)}
+.vv:hover .lbl{color:rgba(237,237,232,.85)}
+.vv p{font-size:1.14rem;line-height:1.44;font-weight:600;letter-spacing:-.02em;margin:14px 0 20px}
+.vv__q{font-size:2.4rem;font-weight:900;color:var(--kiln);line-height:.6;display:block}
+.vv:hover .vv__q{color:var(--bone)}
+
+/* ══════════════════════════════════════════════ areas */
+.ag{display:flex;flex-wrap:wrap;gap:1px;background:var(--lined);border:1px solid var(--lined)}
+.ag a{flex:1 1 150px;background:var(--ink);padding:17px 14px;text-align:center;
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;
+  transition:background-color .35s var(--snap),color .35s}
+.ag a:hover{background:var(--kiln);color:var(--bone)}
+
+/* ══════════════════════════════════════════════ cta */
+.cta{background:var(--kiln);color:var(--bone);padding:clamp(46px,7.4vh,104px) var(--pad);
+  border-bottom:1px solid var(--ink)}
+.cta__g{display:grid;grid-template-columns:1fr;gap:clamp(28px,4vw,64px)}
+@media(min-width:1000px){.cta__g{grid-template-columns:1fr 1fr;align-items:start}}
+.telbig{font-size:clamp(2.1rem,6.2vw,4.6rem);font-weight:900;letter-spacing:-.05em;
+  line-height:.95;display:inline-block;position:relative}
+.telbig::after{content:"";position:absolute;left:0;right:0;bottom:.06em;height:4px;
+  background:var(--bone);transform:scaleX(0);transform-origin:0 50%;
+  transition:transform .5s var(--snap)}
+.telbig:hover::after{transform:scaleX(1)}
+.frm{display:grid;gap:0;grid-template-columns:1fr;border:1px solid var(--ink);
+  background:var(--bone);align-content:start}
+@media(min-width:640px){.frm{grid-template-columns:1fr 1fr}.frm .full{grid-column:1/-1}}
+.fl{position:relative;border-bottom:1px solid var(--line)}
+.fl+.fl{border-left:1px solid var(--line)}
+.fl.full{border-left:0}
+@media(max-width:639px){.fl+.fl{border-left:0}}
+.fl input,.fl textarea,.fl select{width:100%;background:transparent;border:0;outline:none;
+  padding:22px 16px 11px;font-size:.94rem;color:var(--ink);border-radius:0}
+.fl textarea{resize:vertical;min-height:92px}
+.fl label{position:absolute;left:16px;top:19px;color:var(--grey);pointer-events:none;
+  font-size:.94rem;transform-origin:0 50%;transition:transform .35s var(--snap),color .35s}
+.fl input:focus~label,.fl textarea:focus~label,.fl.filled label{
+  transform:translateY(-13px) scale(.66);color:var(--kiln)}
+.fl::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  background:var(--kiln);transform:scaleX(0);transform-origin:0 50%;
+  transition:transform .35s var(--snap)}
+.fl:focus-within::after{transform:scaleX(1)}
+.fl select{color:var(--grey);appearance:none;cursor:pointer}
+.sub{grid-column:1/-1;background:var(--ink);color:var(--bone);border:0;padding:19px;
+  font-family:var(--mono);font-size:.72rem;font-weight:700;letter-spacing:.14em;
+  text-transform:uppercase;cursor:pointer;position:relative;overflow:hidden}
+.sub span{position:relative;z-index:1}
+.sub::before{content:"";position:absolute;inset:0;background:var(--kiln);
+  transform:translateY(101%);transition:transform .4s var(--snap)}
+.sub:hover::before{transform:none}
+.sent{display:none;grid-column:1/-1;background:var(--ink);color:var(--bone);padding:20px;
+  align-items:center;gap:14px}
+.sent.on{display:flex}
+.sent svg{width:34px;height:34px;flex:none;color:var(--kiln)}
+.sent .hb-t{fill:var(--ink)}.sent .hb-a{fill:var(--bone)}
+
+/* ══════════════════════════════════════════════ footer */
+.ft{background:var(--ink);color:var(--bone);padding:clamp(38px,6vh,70px) var(--pad) 22px}
+.ft__g{display:grid;grid-template-columns:1fr;gap:28px}
+@media(min-width:820px){.ft__g{grid-template-columns:1.4fr 1fr 1fr 1fr}}
+.ft h5{margin:0 0 13px;font-family:var(--mono);font-size:.6rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--kiln);font-weight:700}
+.ft ul{margin:0;padding:0;list-style:none}
+.ft li{margin-bottom:8px}
+.ft a{font-size:.9rem;color:#A7ABA6;transition:color .3s}
+.ft a:hover{color:var(--kiln)}
+.ft .brand{border-right:0;padding:0}
+.ft .brand svg{color:var(--bone)}
+.ft .brand .hb-t{fill:var(--ink)}
+.ft__bar{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;
+  border-top:1px solid var(--lined);margin-top:clamp(28px,4.6vh,52px);padding-top:18px;
+  font-family:var(--mono);font-size:.62rem;color:var(--grey)}
+.mark{font-size:clamp(3rem,15.5vw,15rem);font-weight:900;letter-spacing:-.06em;line-height:.8;
+  color:transparent;-webkit-text-stroke:1px rgba(237,237,232,.18);margin:0 0 -.07em;
+  user-select:none;text-align:center}
+.concept{position:fixed;left:10px;bottom:10px;z-index:940;font-family:var(--mono);
+  font-size:.55rem;letter-spacing:.1em;text-transform:uppercase;color:var(--bone);
+  background:var(--ink);padding:6px 11px;opacity:.75;pointer-events:none}
+@media(max-width:940px){.nav__mid,.nav__tel{display:none}.burger{display:grid}
+  .nav{grid-template-columns:1fr auto}
+  .nav__cta{padding:0 16px;font-size:.6rem}}
+@media(max-width:620px){
+  .btnrow{width:100%;flex-direction:column}
+  .btnrow a{border-right:0;border-bottom:1px solid var(--ink);text-align:center}
+  .btnrow a:last-child{border-bottom:0}
+  .nav__cta{padding:0 13px;font-size:.56rem;letter-spacing:.06em}
+  .brand{padding:10px 12px;gap:8px}
+  .brand svg{width:28px;height:28px}
+}
+</style>
+
+<div class="segs" id="segs"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+<!-- ══════════════════════════════════════════════ nav -->
+<header class="nav" id="nav">
+  <a class="brand" href="#top">{{SVG:mark-c-herringbone}}
+    <span><b>DTI TILE</b><s>ATL / GA</s></span></a>
+  <nav class="nav__mid">
+    <a href="#capability">Capability</a><a href="#work">Work</a><a href="#process">Process</a>
+    <a href="#spec">Spec</a><a href="#materials">Materials</a><a href="#contact">Contact</a>
+  </nav>
+  <div class="nav__r">
+    <a class="nav__tel" href="tel:4043848819">404.384.8819</a>
+    <a class="nav__cta" href="#contact"><span>Get an estimate</span></a>
+    <button class="burger" id="burger" aria-label="Menu"><i></i></button>
+  </div>
+</header>
+<div class="sheet" id="sheet">
+  <nav><a class="big" href="#capability">Capability</a><a class="big" href="#work">Work</a>
+    <a class="big" href="#process">Process</a><a class="big" href="#spec">Spec</a>
+    <a class="big" href="#materials">Materials</a><a class="big" href="#contact">Contact</a></nav>
+  <p class="lbl">404.384.8819 — Atlanta Metro, GA</p>
+</div>
+
+<main id="top">
+<!-- ══════════════════════════════════════════════ hero -->
+<section class="hero" id="hero">
+ <div class="hero__g">
+  <div class="hero__l">
+   <div>
+    <p class="lbl lbl--k">[ 01 ] Tile &amp; natural stone — Atlanta Metro</p>
+    <h1 class="d1">
+      <span class="ln"><i>FLAT</i></span>
+      <span class="ln"><i>PLANES.</i></span>
+      <span class="ln"><i class="hl">TIGHT JOINTS.</i></span>
+    </h1>
+    <div class="hero__tags">
+      <i>Marble</i><i>Travertine</i><i>Porcelain</i><i>Mosaic</i><i>Ledger stone</i>
+      <i>Large format</i>
+    </div>
+   </div>
+   <div>
+    <p class="txt" style="margin:0 0 26px">Twenty-four years setting tile in Atlanta homes. We
+      flatten the substrate, snap the layout, dry-fit the field and set it to a laser —
+      then we grout it clean and hand you a room that holds a straightedge.</p>
+    <div class="btnrow">
+      <a class="k" href="#contact"><span>Get an estimate</span></a>
+      <a href="#work"><span>See the work</span></a>
+      <a href="tel:4043848819"><span>404.384.8819</span></a>
+    </div>
+   </div>
+  </div>
+  <div class="hero__r">
+    <img src="{{IMG:16-curbless-wetroom-1800}}" alt="Curbless wet room in large-format porcelain">
+    <div class="hero__stamp"><b>±1 mm</b>Lippage held across the whole field</div>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ ticker -->
+<div class="tick" aria-hidden="true"><div class="tick__t" id="tick">
+  <span>Bathrooms</span><span>Kitchens</span><span>Showers</span><span>Floors</span>
+  <span>Backsplashes</span><span>Hearths</span><span>Pool decks</span><span>Regrout &amp; repair</span>
+</div></div>
+
+<!-- ══════════════════════════════════════════════ capability bento -->
+<section class="sec" id="capability">
+ <div class="wrap">
+  <div class="shead">
+   <div>
+    <div class="shead__n"><b>02</b><span class="lbl">Capability</span></div>
+    <h2 class="d2" data-r="up">What we<br>actually do</h2>
+   </div>
+   <p class="txt" data-r="up" style="max-width:38ch">Residential tile and stone, Atlanta Metro.
+     One crew — ours — from the chalk line to the last bead of silicone.</p>
+  </div>
+  <div class="bento">
+   <div class="bx bx--k" data-r="in"><span class="lbl">[ 01 ]</span>
+     <div><b>Bathrooms<br>&amp; wet rooms</b>
+     <p class="txt txt--s" style="margin:12px 0 0;color:inherit;opacity:.85">Sloped pans, bonded
+       membranes, flood-tested before tile. Curbless entries and linear drains.</p></div></div>
+   <figure class="bx bx--img" data-r="in">
+     <img src="{{IMG:03-herringbone-shower-1100}}" alt="Herringbone marble shower">
+     <figcaption>Shower / Decatur</figcaption></figure>
+   <div class="bx" data-r="in"><span class="lbl">[ 02 ]</span>
+     <div><b>Kitchens &amp;<br>backsplashes</b>
+     <p class="txt txt--s" style="margin:12px 0 0">Full-height slab, bookmatched range walls,
+       handmade zellige. Cut on site, dry-fitted, then set.</p></div></div>
+   <div class="bx bx--ink" data-r="in"><span class="lbl">[ 03 ]</span>
+     <div><b>Natural<br>stone</b>
+     <p class="txt txt--s" style="margin:12px 0 0">Marble, travertine, limestone, slate. Honed,
+       sealed and set by hands that know how each one moves.</p></div></div>
+   <figure class="bx bx--img bx--w" data-r="in">
+     <img src="{{IMG:23-greatroom-lfp-1800}}" alt="Large-format porcelain floor">
+     <figcaption>Large format / Johns Creek</figcaption></figure>
+   <div class="bx" data-r="in"><span class="lbl">[ 04 ]</span>
+     <div><b>Floors &amp;<br>large format</b>
+     <p class="txt txt--s" style="margin:12px 0 0">Self-levelled substrates, uncoupling membranes,
+       heated systems. Slabs up to five feet.</p></div></div>
+   <div class="bx" data-r="in"><span class="lbl">[ 05 ]</span>
+     <div><b>Hearths &amp;<br>feature walls</b>
+     <p class="txt txt--s" style="margin:12px 0 0">Dry-stacked ledger panels, full-height surrounds,
+       mitred returns, no raw edges.</p></div></div>
+   <div class="bx" data-r="in"><span class="lbl">[ 06 ]</span>
+     <div><b>Outdoor &amp;<br>pool decks</b>
+     <p class="txt txt--s" style="margin:12px 0 0">Travertine pavers, bluestone terraces, coping.
+       Built for a Georgia August and a January freeze.</p></div></div>
+   <figure class="bx bx--img" data-r="in">
+     <img src="{{IMG:11-stone-fireplace-1100}}" alt="Stacked stone fireplace">
+     <figcaption>Hearth / East Cobb</figcaption></figure>
+   <div class="bx bx--k" data-r="in"><span class="lbl">[ 07 ]</span>
+     <div><b>Repair &amp;<br>regrout</b>
+     <p class="txt txt--s" style="margin:12px 0 0;color:inherit;opacity:.85">Failed showers rebuilt
+       properly. Cracked fields diagnosed before they are re-tiled.</p></div></div>
+   <a class="bx bx--ink bx--cta" href="#contact" data-r="in"><span class="lbl">[ &rarr; ]</span>
+     <div><b>Not sure<br>which?</b>
+     <p class="txt txt--s" style="margin:12px 0 14px">Tell us the room. We will tell you what it
+       needs and what it costs.</p>
+     <span class="lbl lbl--k bx--cta__go">Get an estimate &rarr;</span></div></a>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ numbers -->
+<section class="sec sec--d on-dark">
+ <div class="wrap">
+  <div class="shead">
+   <div><div class="shead__n"><b>03</b><span class="lbl">By the numbers</span></div>
+     <h2 class="d2" data-r="up">Twenty-four years<br>of the same trade</h2></div>
+  </div>
+  <div class="nums">
+   <div class="nm" data-r="up"><b data-n="24">0</b><span class="lbl">Years setting tile</span></div>
+   <div class="nm" data-r="up"><b data-n="1400" data-sfx="+">0</b><span class="lbl">Rooms completed</span></div>
+   <div class="nm" data-r="up"><b data-n="18">0</b><span class="lbl">Metro communities</span></div>
+   <div class="nm" data-r="up"><b data-n="100" data-sfx="%">0</b><span class="lbl">Own crew, never subbed</span></div>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ work -->
+<section class="sec" id="work">
+ <div class="wrap">
+  <div class="shead">
+   <div><div class="shead__n"><b>04</b><span class="lbl">Selected work</span></div>
+     <h2 class="d2" data-r="up">Rooms we<br>have finished</h2></div>
+   <p class="lbl" data-r="up">Hover for colour — 09 of 40 shown</p>
+  </div>
+  <div class="wg">
+   <a class="wk" href="#contact" data-r="in"><span class="wk__i">01</span>
+     <img src="{{IMG:01-marble-master-bath-1100}}" alt="Carrara master bath">
+     <span class="wk__m"><b>Carrara master suite</b><span class="lbl">Buckhead</span></span></a>
+   <a class="wk" href="#contact" data-r="in"><span class="wk__i">02</span>
+     <img src="{{IMG:27-calacatta-viola-range-1100}}" alt="Bookmatched range wall">
+     <span class="wk__m"><b>Bookmatched range wall</b><span class="lbl">Buckhead</span></span></a>
+   <a class="wk" href="#contact" data-r="in"><span class="wk__i">03</span>
+     <img src="{{IMG:15-marble-waterfall-kitchen-1100}}" alt="Waterfall island">
+     <span class="wk__m"><b>Waterfall island</b><span class="lbl">Sandy Springs</span></span></a>
+   <a class="wk" href="#contact" data-r="in"><span class="wk__i">04</span>
+     <img src="{{IMG:08-dark-basalt-shower-1100}}" alt="Basalt wet room">
+     <span class="wk__m"><b>Basalt wet room</b><span class="lbl">Midtown</span></span></a>
+   <a class="wk" href="#contact" data-r="in"><span class="wk__i">05</span>
+     <img src="{{IMG:07-foyer-medallion-1100}}" alt="Medallion foyer">
+     <span class="wk__m"><b>Medallion foyer</b><span class="lbl">Johns Creek</span></span></a>
+   <a class="wk" href="#contact" data-r="in"><span class="wk__i">06</span>
+     <img src="{{IMG:02-stone-wetbar-1100}}" alt="Ledger stone wet bar">
+     <span class="wk__m"><b>Ledger stone wet bar</b><span class="lbl">East Cobb</span></span></a>
+   <a class="wk" href="#contact" data-r="in"><span class="wk__i">07</span>
+     <img src="{{IMG:06-zellige-kitchen-1100}}" alt="Zellige backsplash">
+     <span class="wk__m"><b>Sage zellige backsplash</b><span class="lbl">Va-Highland</span></span></a>
+   <a class="wk" href="#contact" data-r="in"><span class="wk__i">08</span>
+     <img src="{{IMG:09-pool-deck-1100}}" alt="Travertine pool deck">
+     <span class="wk__m"><b>Travertine pool deck</b><span class="lbl">Marietta</span></span></a>
+   <a class="wk" href="#contact" data-r="in"><span class="wk__i">09</span>
+     <img src="{{IMG:14-cement-tile-mudroom-1100}}" alt="Encaustic mudroom">
+     <span class="wk__m"><b>Encaustic mudroom</b><span class="lbl">Decatur</span></span></a>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ process -->
+<section class="sec" id="process">
+ <div class="wrap">
+  <div class="shead">
+   <div><div class="shead__n"><b>05</b><span class="lbl">Process</span></div>
+     <h2 class="d2" data-r="up">Four stages,<br>no surprises</h2></div>
+   <p class="txt" data-r="up" style="max-width:36ch">A typical hall bath runs eleven working days.
+     You get the schedule in writing before we start.</p>
+  </div>
+  <div class="step2">
+   <article class="st"><div class="st__bar"><i></i></div>
+     <p class="lbl lbl--k">Stage 01 — Day 0</p><h3>Walk &amp; measure</h3>
+     <p class="txt txt--s">We come to the house, check the substrate and tell you plainly what it
+       needs. Written, itemised estimate inside two days.</p>
+     <div class="st__fig"><img src="{{IMG:29-layout-chalklines-620}}" alt="Layout drawing and chalk lines"></div></article>
+   <article class="st"><div class="st__bar"><i></i></div>
+     <p class="lbl lbl--k">Stage 02 — Days 1–3</p><h3>Prep &amp; dry fit</h3>
+     <p class="txt txt--s">Substrate flattened, waterproofing applied and flood-tested, the field
+       snapped and dry-laid so you see every cut before it is permanent.</p>
+     <div class="st__fig"><img src="{{IMG:34-sample-stack-620}}" alt="Stone samples and tools"></div></article>
+   <article class="st"><div class="st__bar"><i></i></div>
+     <p class="lbl lbl--k">Stage 03 — Days 4–9</p><h3>Set to the laser</h3>
+     <p class="txt txt--s">Back-buttered, levelled and clipped. Same crew on day one and day
+       eleven. Site swept and water shut off every evening.</p>
+     <div class="st__fig"><img src="{{IMG:36-floor-in-progress-620}}" alt="Marble floor part-set to a laser line"></div></article>
+   <article class="st"><div class="st__bar"><i></i></div>
+     <p class="lbl lbl--k">Stage 04 — Days 10–11</p><h3>Grout &amp; hand over</h3>
+     <p class="txt txt--s">Joints packed and struck clean, stone sealed, silicone at every change
+       of plane — then we walk it with you under a work light.</p>
+     <div class="st__fig"><img src="{{IMG:24-grout-detail-620}}" alt="Grout joint detail"></div></article>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ spec -->
+<section class="sec sec--d on-dark" id="spec">
+ <div class="wrap">
+  <div class="shead">
+   <div><div class="shead__n"><b>06</b><span class="lbl">Spec sheet</span></div>
+     <h2 class="d2" data-r="up">What "done<br>properly" means</h2></div>
+   <p class="txt" data-r="up" style="max-width:38ch">The standards every DTI job is held to —
+     the same on a powder room as on a master suite.</p>
+  </div>
+  <div class="spec" data-r="up">
+   <div class="spec__r spec__hd"><span class="lbl">Item</span><span class="lbl">What we do</span>
+     <span class="lbl">Standard</span></div>
+   <div class="spec__r"><b>Substrate flatness</b>
+     <span class="txt txt--s">Self-levelled or floated before any tile is opened.</span>
+     <span class="spec__v">±3 mm / 3 m</span></div>
+   <div class="spec__r"><b>Lippage</b>
+     <span class="txt txt--s">Levelling clips on every large-format joint, pulled next day.</span>
+     <span class="spec__v">±1 mm</span></div>
+   <div class="spec__r"><b>Mortar coverage</b>
+     <span class="txt txt--s">Back-buttered and periodically lifted to verify contact.</span>
+     <span class="spec__v">95% wet areas</span></div>
+   <div class="spec__r"><b>Waterproofing</b>
+     <span class="txt txt--s">Bonded membrane, corners banded, then flood-tested in front of you.</span>
+     <span class="spec__v">24 hr hold</span></div>
+   <div class="spec__r"><b>Movement joints</b>
+     <span class="txt txt--s">Silicone at every change of plane and at the perimeter.</span>
+     <span class="spec__v">Per TCNA EJ171</span></div>
+   <div class="spec__r"><b>Grout joints</b>
+     <span class="txt txt--s">Packed full, struck clean, consistent from the door to the far corner.</span>
+     <span class="spec__v">±0.5 mm</span></div>
+   <div class="spec__r"><b>Hand-over</b>
+     <span class="txt txt--s">Walked with you under a raking work light. Anything you find, we fix.</span>
+     <span class="spec__v">Same week</span></div>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ materials -->
+<section class="sec" id="materials">
+ <div class="wrap">
+  <div class="shead">
+   <div><div class="shead__n"><b>07</b><span class="lbl">Materials</span></div>
+     <h2 class="d2" data-r="up">Stone we keep<br>coming back to</h2></div>
+  </div>
+  <div class="mats">
+   <figure class="mat" data-r="in"><img src="{{IMG:21-marble-swatch-620}}" alt="Calacatta marble">
+     <figcaption class="mat__l"><b>Calacatta</b><span class="lbl">2 mm joint</span></figcaption></figure>
+   <figure class="mat" data-r="in"><img src="{{IMG:22-travertine-swatch-620}}" alt="Honed travertine">
+     <figcaption class="mat__l"><b>Travertine</b><span class="lbl">Filled &amp; honed</span></figcaption></figure>
+   <figure class="mat" data-r="in"><img src="{{IMG:05-hex-mosaic-620}}" alt="Hexagon mosaic">
+     <figcaption class="mat__l"><b>Hex mosaic</b><span class="lbl">Warm grey grout</span></figcaption></figure>
+   <figure class="mat" data-r="in"><img src="{{IMG:17-ledger-stone-macro-620}}" alt="Ledger stone">
+     <figcaption class="mat__l"><b>Ledger stone</b><span class="lbl">Dry stacked</span></figcaption></figure>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ voices -->
+<section class="sec">
+ <div class="wrap">
+  <div class="shead">
+   <div><div class="shead__n"><b>08</b><span class="lbl">Clients</span></div>
+     <h2 class="d2" data-r="up">In their words</h2></div>
+  </div>
+  <div class="vg">
+   <blockquote class="vv" data-r="in"><span class="vv__q">“</span>
+     <p>They rebuilt a shower two other outfits had already failed at, and flood tested it in
+       front of me. Four years on, not a hairline anywhere.</p>
+     <span class="lbl">Homeowner — Sandy Springs / Master bath</span></blockquote>
+   <blockquote class="vv" data-r="in"><span class="vv__q">“</span>
+     <p>I specify a lot of stone. DTI are the only setters I will hand a bookmatched slab to
+       without holding my breath.</p>
+     <span class="lbl">Interior designer — Buckhead / Kitchen</span></blockquote>
+   <blockquote class="vv" data-r="in"><span class="vv__q">“</span>
+     <p>Eleven days quoted, eleven days done. They swept the site every single evening. That
+       simply never happens.</p>
+     <span class="lbl">Homeowner — Marietta / Hall bath</span></blockquote>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ areas -->
+<section class="sec sec--d on-dark">
+ <div class="wrap">
+  <div class="shead">
+   <div><div class="shead__n"><b>09</b><span class="lbl">Coverage</span></div>
+     <h2 class="d2" data-r="up">Atlanta Metro</h2></div>
+   <p class="txt" data-r="up" style="max-width:34ch">Inside the perimeter and about forty minutes
+     beyond it. Not on the list? Call anyway.</p>
+  </div>
+  <div class="ag" data-r="up">
+   <a href="#contact">Buckhead</a><a href="#contact">Sandy Springs</a><a href="#contact">Marietta</a>
+   <a href="#contact">Roswell</a><a href="#contact">Alpharetta</a><a href="#contact">Dunwoody</a>
+   <a href="#contact">Decatur</a><a href="#contact">Brookhaven</a><a href="#contact">Smyrna</a>
+   <a href="#contact">Johns Creek</a><a href="#contact">East Cobb</a><a href="#contact">Vinings</a>
+   <a href="#contact">Chamblee</a><a href="#contact">Tucker</a><a href="#contact">Duluth</a>
+   <a href="#contact">Peachtree Corners</a>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ contact -->
+<section class="cta" id="contact">
+ <div class="wrap cta__g">
+  <div>
+    <p class="lbl" style="color:rgba(237,237,232,.8)">[ 10 ] Start a room</p>
+    <h2 class="d2" style="margin:14px 0 0" data-r="up">Tell us what<br>you are building.</h2>
+    <p class="txt" style="color:rgba(237,237,232,.9);margin-top:22px" data-r="up">Send the room,
+      the stone you have in mind and roughly when. We answer every enquiry within one business
+      day — or just call, we generally pick up.</p>
+    <a class="telbig" href="tel:4043848819" data-r="up" style="margin-top:26px">404.384.8819</a>
+    <p class="lbl" style="color:rgba(237,237,232,.8);margin-top:20px">Mon – Sat · 7am – 6pm ·
+      Atlanta Metro, Georgia</p>
+  </div>
+  <form class="frm" id="form" novalidate data-r="up">
+    <div class="fl"><input id="h1" required><label for="h1">Your name</label></div>
+    <div class="fl"><input id="h2" type="tel" required><label for="h2">Phone</label></div>
+    <div class="fl full"><input id="h3" type="email" required><label for="h3">Email</label></div>
+    <div class="fl full"><select id="h4">
+      <option>What are you tiling?</option><option>Bathroom / wet room</option>
+      <option>Kitchen / backsplash</option><option>Flooring</option>
+      <option>Hearth / feature wall</option><option>Outdoor / pool deck</option>
+      <option>Repair or regrout</option><option>Something else</option></select></div>
+    <div class="fl full"><textarea id="h5" rows="3"></textarea>
+      <label for="h5">The room, the stone, the timing</label></div>
+    <button class="sub" type="submit"><span>Send enquiry →</span></button>
+    <div class="sent" id="sent">{{SVG:mark-c-herringbone}}
+      <div><b style="font-size:1.05rem;font-weight:800;display:block">Thank you — that is with us.</b>
+      <span class="lbl">Reply within one business day · demo form, nothing was sent</span></div></div>
+  </form>
+ </div>
+</section>
+</main>
+
+<!-- ══════════════════════════════════════════════ footer -->
+<footer class="ft">
+  <div class="wrap ft__g">
+    <div>
+      <a class="brand" href="#top">{{SVG:mark-c-herringbone}}
+        <span><b>DTI TILE</b><s>ATL / GA</s></span></a>
+      <p class="txt txt--s" style="color:#A7ABA6;margin-top:16px;max-width:30ch">Tile and natural
+        stone installation for Atlanta homes. Twenty-four years, one trade.</p>
+    </div>
+    <div><h5>Capability</h5><ul>
+      <li><a href="#capability">Bathrooms</a></li><li><a href="#capability">Kitchens</a></li>
+      <li><a href="#capability">Natural stone</a></li><li><a href="#capability">Large format</a></li>
+      <li><a href="#capability">Outdoor</a></li></ul></div>
+    <div><h5>Company</h5><ul>
+      <li><a href="#work">Work</a></li><li><a href="#process">Process</a></li>
+      <li><a href="#spec">Spec sheet</a></li><li><a href="#materials">Materials</a></li></ul></div>
+    <div><h5>Contact</h5><ul>
+      <li><a href="tel:4043848819">404.384.8819</a></li>
+      <li><a href="#contact">Get an estimate</a></li>
+      <li>Mon – Sat · 7am – 6pm</li><li>Atlanta Metro, GA</li></ul></div>
+  </div>
+  <p class="mark" aria-hidden="true">DTI TILE</p>
+  <div class="wrap ft__bar">
+    <span>© 2026 DTITILE — ALL RIGHTS RESERVED</span>
+    <span>PRECISION AND POLISH, DETAIL AND SUCH</span>
+  </div>
+</footer>
+<div class="concept">Concept C · Grid</div>
+
+<script>
+(function(){
+"use strict";
+var $=function(s,c){return (c||document).querySelector(s)},
+    $$=function(s,c){return Array.prototype.slice.call((c||document).querySelectorAll(s))},
+    clamp=function(v,a,b){return v<a?a:v>b?b:v};
+
+/* reveal — stagger siblings inside a grid */
+var io=new IntersectionObserver(function(es){
+  es.forEach(function(e){
+    if(!e.isIntersecting)return;
+    var el=e.target, sibs=el.parentElement?$$("[data-r]",el.parentElement):[],
+        i=Math.max(0,sibs.indexOf(el));
+    setTimeout(function(){el.classList.add("on")}, Math.min(i,9)*62);
+    io.unobserve(el);
+  });
+},{threshold:.1,rootMargin:"0px 0px -5% 0px"});
+$$("[data-r],.st,.drawline").forEach(function(el){io.observe(el)});
+
+/* hero entrance */
+requestAnimationFrame(function(){setTimeout(function(){$("#hero").classList.add("go")},120)});
+
+/* nav hide on scroll-down */
+var nav=$("#nav"),last=0;
+/* segmented progress */
+var segs=$$("#segs i");
+function onScroll(){
+  var y=scrollY, max=Math.max(1,document.documentElement.scrollHeight-innerHeight);
+  nav.classList.toggle("hide", y>520 && y>last && !document.body.classList.contains("menu"));
+  last=y;
+  var k=clamp(y/max,0,1)*segs.length;
+  segs.forEach(function(s,i){s.style.setProperty("--f",clamp(k-i,0,1))});
+}
+addEventListener("scroll",onScroll,{passive:true});addEventListener("resize",onScroll);onScroll();
+
+/* menu */
+$("#burger").addEventListener("click",function(){document.body.classList.toggle("menu")});
+$$("#sheet a").forEach(function(a){a.addEventListener("click",function(){
+  document.body.classList.remove("menu")})});
+
+/* counters */
+$$("[data-n]").forEach(function(el){
+  var to=+el.dataset.n, sfx=el.dataset.sfx||"", done=false;
+  var ob=new IntersectionObserver(function(es){
+    if(!es[0].isIntersecting||done)return;done=true;ob.disconnect();
+    var t0=performance.now();
+    (function run(n){var k=clamp((n-t0)/1500,0,1),e=1-Math.pow(1-k,3);
+      el.textContent=Math.round(to*e).toLocaleString("en-US")+sfx;
+      if(k<1)requestAnimationFrame(run)})(t0);
+  },{threshold:.55});
+  ob.observe(el);
+});
+
+/* ticker seamless loop */
+(function(){var t=$("#tick"); if(t) t.innerHTML+=t.innerHTML})();
+
+/* form */
+$$(".fl input,.fl textarea").forEach(function(el){
+  var s=function(){el.parentElement.classList.toggle("filled",!!el.value)};
+  el.addEventListener("input",s);el.addEventListener("blur",s)});
+$("#form").addEventListener("submit",function(e){e.preventDefault();
+  $("#sent").classList.add("on");$(".sub").style.display="none"});
+})();
+</script>

@@ -1,0 +1,1147 @@
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DTI Tile Atelier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════ tokens */
+:root{
+  --ink:#0A0A0B; --ink2:#111113; --ink3:#191919;
+  --bone:#EFEAE1; --bone-dim:#A9A296;
+  --brass:#C6A461; --brass-hi:#E7D3A4;
+  --line:rgba(239,234,225,.13);
+  --ff-d:"Cormorant Garamond",Georgia,"Times New Roman",serif;
+  --ff-b:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --pad:clamp(20px,5vw,80px);
+  --e:cubic-bezier(.22,1,.36,1);
+  --e2:cubic-bezier(.65,.05,.36,1);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--ink);color:var(--bone);font-family:var(--ff-b);
+  font-weight:300;line-height:1.6;overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+button,input,textarea,select{font:inherit;color:inherit}
+::selection{background:var(--brass);color:var(--ink)}
+
+/* ══════════════════════════════════════════════ type scale */
+h1,h2,h3,h4{font-family:var(--ff-d);font-weight:300;margin:0;line-height:1.02;
+  letter-spacing:-.015em}
+.d1{font-size:clamp(3.1rem,10.5vw,10.5rem)}
+.d2{font-size:clamp(2.4rem,6.4vw,6rem)}
+.d3{font-size:clamp(1.7rem,3.4vw,3.1rem)}
+.eyebrow{font-family:var(--ff-b);font-size:.66rem;font-weight:500;letter-spacing:.34em;
+  text-transform:uppercase;color:var(--brass);display:flex;align-items:center;gap:.9em}
+.eyebrow::before{content:"";width:34px;height:1px;background:var(--brass);opacity:.6;flex:none}
+.lede{font-size:clamp(1rem,1.35vw,1.19rem);color:var(--bone-dim);max-width:56ch;line-height:1.78}
+.mono{font-family:var(--ff-b);font-size:.63rem;letter-spacing:.26em;text-transform:uppercase;
+  color:var(--bone-dim)}
+.it{font-style:italic;color:var(--brass-hi)}
+
+/* ══════════════════════════════════════════════ loader */
+.loader{position:fixed;inset:0;z-index:2000;background:var(--ink);display:grid;
+  place-items:center;transition:visibility 0s .95s}
+.loader__inner{text-align:center;transition:opacity .5s var(--e),transform .7s var(--e)}
+.loader__mark{width:66px;margin:0 auto 26px;color:var(--brass);opacity:0;
+  animation:lmark 1s var(--e) .1s forwards}
+@keyframes lmark{to{opacity:1}}
+.loader__num{font-family:var(--ff-d);font-size:clamp(3rem,9vw,7rem);line-height:1;
+  color:var(--bone);font-variant-numeric:tabular-nums}
+.loader__bar{width:min(230px,42vw);height:1px;background:var(--line);margin:22px auto 0;
+  position:relative;overflow:hidden}
+.loader__bar i{position:absolute;inset:0;background:var(--brass);transform:scaleX(0);
+  transform-origin:0 50%}
+.loader__word{margin-top:16px;font-size:.6rem;letter-spacing:.4em;text-transform:uppercase;
+  color:var(--bone-dim)}
+.loader.done .loader__inner{opacity:0;transform:translateY(-18px)}
+.loader.done{visibility:hidden}
+.curtain{position:fixed;inset:0;z-index:1999;display:grid;
+  grid-template-columns:repeat(6,1fr);pointer-events:none}
+.curtain i{background:var(--ink2);transform:translateY(0);
+  transition:transform 1.05s var(--e)}
+.curtain.up i{transform:translateY(-101%)}
+
+/* ══════════════════════════════════════════════ cursor + progress */
+.cur,.cur-r{position:fixed;top:0;left:0;z-index:1500;pointer-events:none;border-radius:50%;
+  mix-blend-mode:difference;opacity:0;transition:opacity .4s}
+.cur{width:6px;height:6px;background:var(--bone);margin:-3px 0 0 -3px}
+.cur-r{width:38px;height:38px;border:1px solid rgba(239,234,225,.55);margin:-19px 0 0 -19px;
+  transition:opacity .4s,width .38s var(--e),height .38s var(--e),margin .38s var(--e),
+    background-color .38s var(--e)}
+body.has-cursor .cur,body.has-cursor .cur-r{opacity:1}
+body.cur-lg .cur-r{width:76px;height:76px;margin:-38px 0 0 -38px;background:rgba(239,234,225,.14)}
+body.cur-lg .cur{opacity:0}
+.prog{position:fixed;top:0;left:0;height:2px;width:100%;z-index:1400;transform:scaleX(0);
+  transform-origin:0 50%;background:linear-gradient(90deg,var(--brass),var(--brass-hi))}
+
+/* ══════════════════════════════════════════════ nav */
+.nav{position:fixed;inset:0 0 auto;z-index:1100;display:flex;align-items:center;
+  justify-content:space-between;gap:24px;padding:22px var(--pad);
+  transition:padding .5s var(--e),background-color .5s var(--e),border-color .5s var(--e);
+  border-bottom:1px solid transparent}
+.nav.stuck{padding:13px var(--pad);background:rgba(10,10,11,.82);
+  backdrop-filter:blur(16px) saturate(1.2);-webkit-backdrop-filter:blur(16px) saturate(1.2);
+  border-bottom-color:var(--line)}
+.nav.hide{transform:translateY(-101%)}
+.nav{transition:transform .55s var(--e),padding .5s var(--e),background-color .5s var(--e),
+  border-color .5s var(--e)}
+.brand{display:flex;align-items:center;gap:13px;flex:none}
+.brand svg{width:34px;height:34px;color:var(--brass);
+  transition:transform .8s var(--e)}
+.brand:hover svg{transform:rotate(90deg)}
+.brand__tx b{display:block;font-family:var(--ff-d);font-size:1.28rem;font-weight:400;
+  letter-spacing:.34em;line-height:1;text-indent:.34em}
+.brand__tx s{display:block;text-decoration:none;font-size:.5rem;letter-spacing:.36em;
+  color:var(--bone-dim);margin-top:5px;text-indent:.36em}
+.nav__links{display:flex;gap:clamp(14px,2.1vw,32px);align-items:center}
+.nav__links a{font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;
+  position:relative;padding:6px 0;color:var(--bone-dim);transition:color .35s}
+.nav__links a::after{content:"";position:absolute;left:0;bottom:0;width:100%;height:1px;
+  background:var(--brass);transform:scaleX(0);transform-origin:100% 50%;
+  transition:transform .5s var(--e)}
+.nav__links a:hover{color:var(--bone)}
+.nav__links a:hover::after{transform:scaleX(1);transform-origin:0 50%}
+.nav__cta{display:flex;align-items:center;gap:16px;flex:none}
+.tel{font-family:var(--ff-d);font-size:1.12rem;letter-spacing:.06em;white-space:nowrap;
+  transition:color .35s}
+.tel:hover{color:var(--brass)}
+.btn{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:.7em;
+  padding:14px 27px;border:1px solid var(--brass);color:var(--brass);overflow:hidden;
+  font-size:.68rem;letter-spacing:.2em;text-transform:uppercase;background:none;cursor:pointer;
+  border-radius:999px;transition:color .45s var(--e),border-color .45s}
+.btn span{position:relative;z-index:1}
+.btn::before{content:"";position:absolute;inset:0;background:var(--brass);
+  transform:translateY(101%);transition:transform .55s var(--e)}
+.btn:hover{color:var(--ink)}
+.btn:hover::before{transform:translateY(0)}
+.btn--solid{background:var(--brass);color:var(--ink);border-color:var(--brass)}
+.btn--solid::before{background:var(--bone)}
+.btn--solid:hover{color:var(--ink)}
+.burger{display:none;width:42px;height:42px;border:1px solid var(--line);border-radius:50%;
+  background:none;cursor:pointer;place-items:center;flex:none}
+.burger i{display:block;width:15px;height:1px;background:var(--bone);position:relative;
+  transition:background-color .3s}
+.burger i::before,.burger i::after{content:"";position:absolute;left:0;width:15px;height:1px;
+  background:var(--bone);transition:transform .45s var(--e)}
+.burger i::before{top:-5px}.burger i::after{top:5px}
+body.menu .burger i{background:transparent}
+body.menu .burger i::before{transform:translateY(5px) rotate(45deg)}
+body.menu .burger i::after{transform:translateY(-5px) rotate(-45deg)}
+
+/* mobile sheet */
+.sheet{position:fixed;inset:0;z-index:1050;background:var(--ink2);padding:112px var(--pad) 40px;
+  display:flex;flex-direction:column;justify-content:space-between;
+  clip-path:inset(0 0 100% 0);transition:clip-path .8s var(--e);visibility:hidden}
+body.menu .sheet{clip-path:inset(0 0 0 0);visibility:visible}
+.sheet a.big{font-family:var(--ff-d);font-size:clamp(2rem,9vw,3.4rem);display:block;
+  padding:9px 0;border-bottom:1px solid var(--line);opacity:0;transform:translateY(24px);
+  transition:opacity .6s var(--e),transform .6s var(--e)}
+body.menu .sheet a.big{opacity:1;transform:none}
+body.menu .sheet a.big:nth-child(1){transition-delay:.18s}
+body.menu .sheet a.big:nth-child(2){transition-delay:.25s}
+body.menu .sheet a.big:nth-child(3){transition-delay:.32s}
+body.menu .sheet a.big:nth-child(4){transition-delay:.39s}
+body.menu .sheet a.big:nth-child(5){transition-delay:.46s}
+
+/* ══════════════════════════════════════════════ hero */
+.hero{position:relative;min-height:100svh;display:flex;align-items:flex-end;
+  padding:0 var(--pad) clamp(40px,7vh,74px);overflow:hidden;isolation:isolate}
+.hero__bg{position:absolute;inset:-6% -2%;z-index:-2;will-change:transform}
+.hero__bg img{width:100%;height:100%;object-fit:cover;transform:scale(1.16);
+  animation:kb 2.6s var(--e) .35s forwards}
+@keyframes kb{to{transform:scale(1)}}
+.hero__veil{position:absolute;inset:0;z-index:-1;
+  background:
+   linear-gradient(180deg,rgba(10,10,11,.78) 0%,rgba(10,10,11,.16) 34%,rgba(10,10,11,.5) 70%,rgba(10,10,11,.96) 100%),
+   radial-gradient(120% 85% at 78% 22%,transparent 32%,rgba(10,10,11,.62) 100%)}
+.hero__grid{position:absolute;inset:0;z-index:-1;opacity:.16;pointer-events:none;
+  background-image:linear-gradient(var(--line) 1px,transparent 1px),
+    linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:clamp(70px,9vw,130px) clamp(70px,9vw,130px)}
+.hero__in{width:100%;max-width:1560px;margin:0 auto}
+.hero .d1{margin:.16em 0 0;letter-spacing:-.03em}
+.hero .d1 .l2{display:block;padding-left:clamp(0px,13vw,240px)}
+.hero__foot{display:flex;flex-wrap:wrap;gap:clamp(18px,4vw,56px);align-items:flex-end;
+  justify-content:space-between;margin-top:clamp(24px,4vh,48px);
+  border-top:1px solid var(--line);padding-top:24px}
+.hero__side{position:absolute;right:calc(var(--pad) - 6px);top:50%;transform:translateY(-50%);
+  writing-mode:vertical-rl;font-size:.6rem;letter-spacing:.4em;text-transform:uppercase;
+  color:var(--bone-dim);white-space:nowrap;display:flex;align-items:center;gap:14px;
+  max-height:76vh}
+.hero__side::after{content:"";height:70px;width:1px;background:var(--line);flex:none}
+.scrollcue{display:flex;align-items:center;gap:12px;font-size:.6rem;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--bone-dim)}
+.scrollcue i{width:1px;height:44px;background:linear-gradient(var(--brass),transparent);
+  position:relative;overflow:hidden;display:block}
+.scrollcue i::after{content:"";position:absolute;inset:0;background:var(--brass);
+  animation:cue 2.1s var(--e2) infinite}
+@keyframes cue{0%{transform:translateY(-100%)}60%,100%{transform:translateY(100%)}}
+
+/* word-mask reveal */
+.msk{display:inline-block;overflow:hidden;vertical-align:bottom;padding-bottom:.06em}
+.msk>i{display:inline-block;font-style:inherit;transform:translateY(112%);
+  transition:transform 1.05s var(--e)}
+.rv .msk>i,.in .msk>i{transform:translateY(0)}
+
+/* ══════════════════════════════════════════════ ribbon */
+.ribbon{background:var(--brass);color:var(--ink);overflow:hidden;padding:15px 0;
+  display:flex;white-space:nowrap;user-select:none}
+.ribbon__t{display:flex;gap:0;animation:mq 34s linear infinite;flex:none}
+.ribbon:hover .ribbon__t{animation-play-state:paused}
+.ribbon span{font-family:var(--ff-d);font-size:1.28rem;letter-spacing:.18em;
+  text-transform:uppercase;padding:0 26px;display:flex;align-items:center;gap:26px;flex:none}
+.ribbon span::after{content:"";width:5px;height:5px;background:var(--ink);
+  transform:rotate(45deg);display:block}
+@keyframes mq{to{transform:translateX(-50%)}}
+
+/* ══════════════════════════════════════════════ generic section */
+.sec{padding:clamp(72px,13vh,168px) var(--pad);position:relative}
+.wrap{max-width:1560px;margin:0 auto}
+.sechead{display:flex;flex-wrap:wrap;gap:26px 60px;align-items:flex-end;
+  justify-content:space-between;margin-bottom:clamp(38px,6vh,78px)}
+.sechead__l{max-width:60ch}
+.idx{font-family:var(--ff-d);font-size:.95rem;color:var(--brass);letter-spacing:.1em}
+
+/* reveal engine */
+[data-rv]{opacity:0;transition:opacity 1.05s var(--e),transform 1.05s var(--e),
+  clip-path 1.2s var(--e),filter 1.05s var(--e)}
+[data-rv="up"]{transform:translateY(46px)}
+[data-rv="fade"]{}
+[data-rv="scale"]{transform:scale(1.07);clip-path:inset(0 0 0 0)}
+[data-rv="clip"]{clip-path:inset(0 0 100% 0);opacity:1}
+[data-rv="clipx"]{clip-path:inset(0 100% 0 0);opacity:1}
+[data-rv="blur"]{filter:blur(11px);transform:translateY(22px)}
+[data-rv].in{opacity:1;transform:none;clip-path:inset(0 0 0 0);filter:none}
+
+/* ══════════════════════════════════════════════ manifesto */
+.man{display:grid;grid-template-columns:1fr;gap:clamp(34px,5vw,80px);align-items:center}
+@media(min-width:900px){.man{grid-template-columns:1.05fr .95fr}}
+.man__q{font-family:var(--ff-d);font-size:clamp(1.7rem,3.5vw,3.35rem);line-height:1.18;
+  letter-spacing:-.015em}
+.man__fig{position:relative;overflow:hidden;aspect-ratio:4/5}
+.man__fig img{width:100%;height:112%;object-fit:cover;will-change:transform}
+.man__badge{position:absolute;left:0;bottom:0;background:var(--ink);padding:20px 26px;
+  border-top:1px solid var(--brass);max-width:74%}
+.man__badge b{font-family:var(--ff-d);font-size:1.6rem;font-weight:400;display:block;
+  color:var(--brass)}
+
+/* ══════════════════════════════════════════════ figures */
+.figs{display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line)}
+@media(min-width:840px){.figs{grid-template-columns:repeat(4,1fr)}}
+.fig{background:var(--ink);padding:clamp(26px,3.6vw,48px);position:relative;overflow:hidden}
+.fig::after{content:"";position:absolute;inset:auto 0 0 0;height:1px;background:var(--brass);
+  transform:scaleX(0);transform-origin:0 50%;transition:transform .9s var(--e)}
+.fig.in::after{transform:scaleX(1)}
+.fig b{font-family:var(--ff-d);font-size:clamp(2.5rem,5.4vw,4.1rem);font-weight:300;
+  display:block;line-height:1;font-variant-numeric:tabular-nums}
+.fig small{display:block;margin-top:12px;font-size:.62rem;letter-spacing:.24em;
+  text-transform:uppercase;color:var(--bone-dim)}
+
+/* ══════════════════════════════════════════════ services */
+.svc{display:grid;grid-template-columns:1fr;gap:clamp(28px,4vw,64px)}
+@media(min-width:1000px){.svc{grid-template-columns:1fr .85fr;align-items:start}}
+.svc__list{border-top:1px solid var(--line)}
+.acc{border-bottom:1px solid var(--line)}
+.acc__hd{width:100%;background:none;border:0;cursor:pointer;text-align:left;display:flex;
+  align-items:center;gap:20px;padding:clamp(18px,2.4vw,28px) 0;transition:padding-left .5s var(--e)}
+.acc:hover .acc__hd,.acc.open .acc__hd{padding-left:16px}
+.acc__n{font-size:.62rem;letter-spacing:.2em;color:var(--brass);flex:none;width:28px}
+.acc__t{font-family:var(--ff-d);font-size:clamp(1.35rem,2.5vw,2.15rem);flex:1;
+  transition:color .4s}
+.acc.open .acc__t{color:var(--brass-hi)}
+.acc__ic{width:26px;height:26px;flex:none;position:relative}
+.acc__ic::before,.acc__ic::after{content:"";position:absolute;left:50%;top:50%;background:var(--brass);
+  transition:transform .5s var(--e),opacity .4s}
+.acc__ic::before{width:13px;height:1px;transform:translate(-50%,-50%)}
+.acc__ic::after{width:1px;height:13px;transform:translate(-50%,-50%)}
+.acc.open .acc__ic::after{transform:translate(-50%,-50%) rotate(90deg);opacity:0}
+.acc__bd{overflow:hidden;height:0;transition:height .62s var(--e)}
+.acc__bd>div{padding:0 0 26px 48px;color:var(--bone-dim);max-width:56ch;font-size:.95rem}
+.acc__tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.acc__tags i{font-style:normal;font-size:.58rem;letter-spacing:.16em;text-transform:uppercase;
+  border:1px solid var(--line);border-radius:99px;padding:6px 12px;color:var(--bone-dim)}
+.svc__stage{position:sticky;top:96px;aspect-ratio:4/5;overflow:hidden;background:var(--ink2)}
+.svc__stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;
+  opacity:0;transform:scale(1.09);transition:opacity 1s var(--e),transform 1.5s var(--e)}
+.svc__stage img.on{opacity:1;transform:scale(1)}
+.svc__stage::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,transparent 55%,rgba(10,10,11,.72))}
+.svc__cap{position:absolute;left:0;bottom:0;z-index:2;padding:26px;font-family:var(--ff-d);
+  font-size:1.4rem}
+
+/* ══════════════════════════════════════════════ works (pinned horizontal) */
+.works{position:relative;background:var(--ink2)}
+.works__sticky{position:sticky;top:0;height:100svh;overflow:hidden;display:flex;
+  flex-direction:column;justify-content:center}
+.works__hd{padding:0 var(--pad);display:flex;justify-content:space-between;align-items:flex-end;
+  gap:24px;flex-wrap:wrap;margin-bottom:clamp(20px,3.4vh,40px)}
+.works__track{display:flex;gap:clamp(14px,2vw,30px);padding:0 var(--pad);will-change:transform}
+.card{position:relative;flex:none;width:clamp(230px,25vw,400px);overflow:hidden;
+  background:var(--ink3)}
+.card--tall{aspect-ratio:3/4}
+.card--wide{width:clamp(300px,38vw,620px);aspect-ratio:16/11}
+.card img{width:100%;height:100%;object-fit:cover;transition:transform 1.3s var(--e),
+  filter .8s var(--e);filter:grayscale(.32) brightness(.86)}
+.card:hover img{transform:scale(1.06);filter:none}
+.card__m{position:absolute;inset:auto 0 0 0;padding:20px 22px;display:flex;
+  justify-content:space-between;align-items:flex-end;gap:14px;
+  background:linear-gradient(transparent,rgba(10,10,11,.92));
+  transform:translateY(6px);opacity:.72;transition:.6s var(--e)}
+.card:hover .card__m{transform:none;opacity:1}
+.card__m .mono{color:var(--brass)}
+.card__m b{font-family:var(--ff-d);font-size:1.16rem;font-weight:400}
+.works__rail{margin:clamp(18px,3vh,34px) var(--pad) 0;height:1px;background:var(--line);
+  position:relative}
+.works__rail i{position:absolute;inset:0;background:var(--brass);transform-origin:0 50%;
+  transform:scaleX(0)}
+
+/* ══════════════════════════════════════════════ before / after */
+.ba{position:relative;user-select:none;overflow:hidden;aspect-ratio:3/2;
+  cursor:ew-resize;background:var(--ink2)}
+.ba img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.ba__after{clip-path:inset(0 0 0 50%)}
+.ba__bar{position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--bone);
+  pointer-events:none;box-shadow:0 0 24px rgba(0,0,0,.5)}
+.ba__knob{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;
+  height:60px;border-radius:50%;background:var(--bone);color:var(--ink);display:grid;
+  place-items:center;font-size:.9rem;letter-spacing:.1em;box-shadow:0 8px 34px rgba(0,0,0,.45)}
+.ba__tag{position:absolute;top:20px;padding:8px 16px;border-radius:99px;font-size:.58rem;
+  letter-spacing:.24em;text-transform:uppercase;background:rgba(10,10,11,.66);
+  backdrop-filter:blur(8px);pointer-events:none}
+.ba__tag--b{left:20px}.ba__tag--a{right:20px;background:var(--brass);color:var(--ink)}
+
+/* ══════════════════════════════════════════════ process */
+.proc{display:grid;gap:0;position:relative}
+.proc__line{position:absolute;left:0;top:0;bottom:0;width:1px;background:var(--line)}
+.proc__line i{position:absolute;inset:0;background:var(--brass);transform-origin:50% 0;
+  transform:scaleY(0)}
+.step{display:grid;grid-template-columns:1fr;gap:14px 40px;padding:clamp(26px,4vh,52px) 0 
+  clamp(26px,4vh,52px) clamp(28px,5vw,84px);border-bottom:1px solid var(--line);position:relative}
+@media(min-width:860px){.step{grid-template-columns:.28fr .38fr .34fr;align-items:start}}
+.step::before{content:"";position:absolute;left:-4px;top:calc(clamp(26px,4vh,52px) + .5em);
+  width:9px;height:9px;background:var(--ink);border:1px solid var(--brass);
+  transform:rotate(45deg) scale(0);transition:transform .6s var(--e) .15s}
+.step.in::before{transform:rotate(45deg) scale(1)}
+.step h3{font-size:clamp(1.3rem,2.3vw,1.95rem)}
+.step .mono{margin-bottom:8px}
+.step p{margin:0;color:var(--bone-dim);font-size:.94rem}
+.step__fig{overflow:hidden;aspect-ratio:16/10}
+.step__fig img{width:100%;height:100%;object-fit:cover;filter:grayscale(.3);
+  transition:filter .8s,transform 1.2s var(--e)}
+.step:hover .step__fig img{filter:none;transform:scale(1.05)}
+
+/* ══════════════════════════════════════════════ maker */
+.maker{display:grid;grid-template-columns:1fr;gap:clamp(30px,5vw,74px);align-items:center}
+@media(min-width:900px){.maker{grid-template-columns:.82fr 1.18fr}}
+.maker__fig{position:relative;overflow:hidden;aspect-ratio:3/4}
+.maker__fig img{width:100%;height:110%;object-fit:cover;will-change:transform}
+.maker__sig{font-family:var(--ff-d);font-style:italic;font-size:1.9rem;color:var(--brass);
+  margin-top:26px}
+
+/* ══════════════════════════════════════════════ voices */
+.voices{position:relative;min-height:clamp(250px,34vh,330px)}
+.voice{position:absolute;inset:0;opacity:0;transform:translateY(20px);
+  transition:opacity .9s var(--e),transform .9s var(--e);pointer-events:none}
+.voice.on{opacity:1;transform:none;pointer-events:auto}
+.voice p{font-family:var(--ff-d);font-size:clamp(1.35rem,3.1vw,2.5rem);line-height:1.32;
+  margin:0 0 26px;max-width:24ch}
+@media(min-width:900px){.voice p{max-width:34ch}}
+.voice cite{font-style:normal;font-size:.66rem;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--bone-dim)}
+.voice cite b{color:var(--brass);font-weight:400;display:block;margin-bottom:6px;
+  font-size:.72rem}
+.dots{display:flex;gap:9px;margin-top:34px}
+.dots button{width:30px;height:2px;border:0;padding:0;background:var(--line);cursor:pointer;
+  position:relative;overflow:hidden}
+.dots button i{position:absolute;inset:0;background:var(--brass);transform:scaleX(0);
+  transform-origin:0 50%}
+.dots button.on i{animation:dotfill 6.5s linear forwards}
+@keyframes dotfill{to{transform:scaleX(1)}}
+
+/* ══════════════════════════════════════════════ areas */
+.areas{display:flex;flex-wrap:wrap;gap:0;border-top:1px solid var(--line)}
+.areas a{flex:1 1 190px;padding:20px 8px;border-bottom:1px solid var(--line);
+  border-right:1px solid var(--line);font-family:var(--ff-d);font-size:clamp(1.05rem,1.9vw,1.6rem);
+  position:relative;overflow:hidden;transition:color .45s var(--e);text-align:center}
+.areas a span{position:relative;z-index:1}
+.areas a::before{content:"";position:absolute;inset:0;background:var(--brass);
+  transform:translateY(101%);transition:transform .55s var(--e)}
+.areas a:hover{color:var(--ink)}
+.areas a:hover::before{transform:none}
+
+/* ══════════════════════════════════════════════ contact */
+.cta{position:relative;overflow:hidden;isolation:isolate}
+.cta__bg{position:absolute;inset:-8% 0;z-index:-2;will-change:transform}
+.cta__bg img{width:100%;height:100%;object-fit:cover;filter:grayscale(.4) brightness(.42)}
+.cta__veil{position:absolute;inset:0;z-index:-1;
+  background:linear-gradient(180deg,var(--ink),rgba(10,10,11,.7) 45%,var(--ink))}
+.form{display:grid;gap:22px;grid-template-columns:1fr;align-content:start}
+@media(min-width:700px){.form{grid-template-columns:1fr 1fr}.form .full{grid-column:1/-1}}
+.field{position:relative}
+.field input,.field textarea,.field select{width:100%;background:transparent;border:0;
+  border-bottom:1px solid var(--line);padding:18px 0 12px;outline:none;font-size:.98rem;
+  transition:border-color .45s;border-radius:0}
+.field textarea{resize:vertical;min-height:110px}
+.field label{position:absolute;left:0;top:18px;font-size:.98rem;color:var(--bone-dim);
+  pointer-events:none;transform-origin:0 50%;
+  transition:transform .45s var(--e),color .45s var(--e)}
+.field input:focus~label,.field textarea:focus~label,.field.filled label{
+  transform:translateY(-18px) scale(.66);color:var(--brass)}
+.field input:focus,.field textarea:focus,.field select:focus{border-bottom-color:var(--brass)}
+.field select{color:var(--bone-dim);appearance:none;cursor:pointer}
+.field select option{background:var(--ink2);color:var(--bone)}
+.field__u{position:absolute;left:0;bottom:0;height:1px;width:100%;background:var(--brass);
+  transform:scaleX(0);transform-origin:0 50%;transition:transform .55s var(--e)}
+.field input:focus~.field__u,.field textarea:focus~.field__u,
+.field select:focus~.field__u{transform:scaleX(1)}
+.sent{display:none;border:1px solid var(--brass);padding:26px 30px;align-items:center;gap:16px}
+.sent.on{display:flex;animation:pop .6s var(--e)}
+@keyframes pop{from{opacity:0;transform:translateY(14px)}}
+.contactgrid{display:grid;gap:clamp(30px,5vw,74px);grid-template-columns:1fr;align-items:start}
+@media(min-width:1000px){.contactgrid{grid-template-columns:.9fr 1.1fr}}
+.cinfo dt{font-size:.6rem;letter-spacing:.26em;text-transform:uppercase;color:var(--bone-dim);
+  margin-top:26px}
+.cinfo dd{margin:7px 0 0;font-family:var(--ff-d);font-size:1.45rem}
+.cinfo dd a:hover{color:var(--brass)}
+
+/* ══════════════════════════════════════════════ footer */
+.foot{border-top:1px solid var(--line);padding:clamp(46px,7vh,84px) var(--pad) 30px}
+.foot__top{display:flex;flex-wrap:wrap;gap:34px;justify-content:space-between;
+  align-items:flex-start;margin-bottom:clamp(38px,6vh,72px)}
+.foot__cols{display:flex;flex-wrap:wrap;gap:clamp(28px,5vw,74px)}
+.foot__cols h5{margin:0 0 14px;font-size:.6rem;letter-spacing:.26em;text-transform:uppercase;
+  color:var(--brass);font-weight:500}
+.foot__cols li{list-style:none;margin-bottom:9px}
+.foot__cols ul{margin:0;padding:0}
+.foot__cols a{font-size:.88rem;color:var(--bone-dim);transition:color .35s}
+.foot__cols a:hover{color:var(--bone)}
+.foot__bar{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;
+  border-top:1px solid var(--line);padding-top:24px;font-size:.68rem;color:var(--bone-dim)}
+.giant{font-family:var(--ff-d);font-size:clamp(3.4rem,15.5vw,15rem);line-height:.82;
+  letter-spacing:-.035em;color:transparent;-webkit-text-stroke:1px rgba(239,234,225,.16);
+  text-align:center;margin:0 0 -.09em;user-select:none}
+
+/* ══════════════════════════════════════════════ misc */
+.hr{height:1px;background:var(--line);border:0;margin:0}
+.demo-note{position:fixed;left:14px;bottom:14px;z-index:1200;
+  font-size:.56rem;letter-spacing:.2em;text-transform:uppercase;color:var(--bone-dim);
+  background:rgba(10,10,11,.78);border:1px solid var(--line);border-radius:99px;
+  padding:7px 15px;backdrop-filter:blur(8px);pointer-events:none;opacity:.62}
+@media(max-width:900px){
+  .nav__links,.tel{display:none}
+  .burger{display:grid}
+  .hero__side{display:none}
+  .svc__stage{position:relative;top:0}
+  .nav__cta .btn{padding:11px 16px;font-size:.58rem;letter-spacing:.12em}
+}
+@media(max-width:620px){
+  .nav__cta .btn{display:none}
+  .brand__tx b{font-size:1.1rem}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important}
+  [data-rv]{opacity:1!important;transform:none!important;clip-path:none!important;filter:none!important}
+  .msk>i{transform:none!important}
+}
+</style>
+
+<!-- ══════════════════════════════════════════════ loader -->
+<div class="loader" id="loader">
+  <div class="loader__inner">
+    <div class="loader__mark">{{SVG:mark-a-lozenge}}</div>
+    <div class="loader__num" id="lnum">00</div>
+    <div class="loader__bar"><i id="lbar"></i></div>
+    <div class="loader__word">Setting the first tile</div>
+  </div>
+</div>
+<div class="curtain" id="curtain"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<div class="cur"></div><div class="cur-r"></div>
+<div class="prog" id="prog"></div>
+
+<!-- ══════════════════════════════════════════════ nav -->
+<header class="nav" id="nav">
+  <a class="brand" href="#top" aria-label="DTI Tile home">
+    {{SVG:mark-a-lozenge}}
+    <span class="brand__tx"><b>DTI</b><s>Tile Atelier</s></span>
+  </a>
+  <nav class="nav__links">
+    <a href="#work">Work</a><a href="#services">Services</a><a href="#process">Process</a>
+    <a href="#maker">About</a><a href="#contact">Contact</a>
+  </nav>
+  <div class="nav__cta">
+    <a class="tel" href="tel:4043848819">404.384.8819</a>
+    <a class="btn magnetic" href="#contact"><span>Request an estimate</span></a>
+    <button class="burger" id="burger" aria-label="Menu"><i></i></button>
+  </div>
+</header>
+
+<div class="sheet" id="sheet">
+  <nav>
+    <a class="big" href="#work">Work</a><a class="big" href="#services">Services</a>
+    <a class="big" href="#process">Process</a><a class="big" href="#maker">About</a>
+    <a class="big" href="#contact">Contact</a>
+  </nav>
+  <div>
+    <a class="tel" href="tel:4043848819" style="display:block;font-size:1.7rem">404.384.8819</a>
+    <p class="mono" style="margin-top:10px">Atlanta Metro · Georgia</p>
+  </div>
+</div>
+
+<main id="top">
+<!-- ══════════════════════════════════════════════ hero -->
+<section class="hero">
+  <div class="hero__bg" data-par="0.22"><img src="{{IMG:25-dark-marble-hero-1800}}" alt="Bookmatched black marble bathroom"></div>
+  <div class="hero__veil"></div><div class="hero__grid"></div>
+  <div class="hero__side">Est. Atlanta · Natural stone specialists</div>
+  <div class="hero__in" data-hero>
+    <p class="eyebrow"><span class="msk"><i>Tile &amp; natural stone · Atlanta Metro</i></span></p>
+    <h1 class="d1">
+      <span class="msk"><i>Precision</i></span><br>
+      <span class="l2"><span class="msk"><i>&amp;&nbsp;</i></span><span class="msk"><i class="it">polish</i></span></span>
+    </h1>
+    <div class="hero__foot">
+      <p class="lede" data-rv="up" data-delay="900">Expert tile installation across the Atlanta Metro.
+        Marble, travertine, porcelain and mosaic — set true, grouted clean, finished to the
+        millimetre. Detail and such.</p>
+      <a class="scrollcue" href="#work"><i></i> Scroll</a>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ ribbon -->
+<div class="ribbon" aria-hidden="true"><div class="ribbon__t" id="ribbon">
+  <span>Marble</span><span>Travertine</span><span>Porcelain</span><span>Mosaic</span>
+  <span>Ledger stone</span><span>Herringbone</span><span>Waterproofing</span><span>Heated floors</span>
+</div></div>
+
+<!-- ══════════════════════════════════════════════ manifesto -->
+<section class="sec">
+ <div class="wrap man">
+  <div>
+    <p class="eyebrow" data-rv="up">The standard</p>
+    <h2 class="man__q" style="margin:26px 0 0" data-split data-rv>
+      A tile floor is a plane. Either it is true, or it is not. There is
+      <em class="it">no third option</em> — and that is the whole of our trade.
+    </h2>
+    <p class="lede" style="margin-top:30px" data-rv="up" data-delay="160">
+      Every job begins the same way: a flat substrate, a dry layout, a chalk line that
+      answers to the room and not to the wall. We set for the eye — sightlines squared,
+      cuts landed where they belong, grout joints that hold their width from the door to
+      the far corner. It is slower. It is the only way we know.
+    </p>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;margin-top:36px" data-rv="up" data-delay="260">
+      <a class="btn magnetic" href="#work"><span>See the work</span></a>
+      <a class="btn magnetic" href="#process"><span>Our process</span></a>
+    </div>
+  </div>
+  <figure class="man__fig" style="margin:0" data-rv="scale">
+    <img src="{{IMG:10-mitre-macro-1100}}" alt="Mitred marble corner detail" data-par="0.1">
+    <figcaption class="man__badge"><b>0.4&nbsp;mm</b>
+      <span class="mono">Tolerance on a mitred slab corner</span></figcaption>
+  </figure>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ figures -->
+<section class="sec" style="padding-top:0;padding-bottom:clamp(40px,6vh,86px)">
+ <div class="wrap figs">
+  <div class="fig" data-rv="up"><b data-count="24" data-suffix="">0</b><small>Years setting tile</small></div>
+  <div class="fig" data-rv="up" data-delay="90"><b data-count="1400" data-suffix="+">0</b><small>Rooms completed</small></div>
+  <div class="fig" data-rv="up" data-delay="180"><b data-count="18" data-suffix="">0</b><small>Metro communities served</small></div>
+  <div class="fig" data-rv="up" data-delay="270"><b data-count="100" data-suffix="%">0</b><small>Own crew, never subbed</small></div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ services -->
+<section class="sec" id="services">
+ <div class="wrap">
+  <div class="sechead">
+    <div class="sechead__l">
+      <p class="eyebrow" data-rv="up">What we install</p>
+      <h2 class="d2" style="margin-top:22px" data-split data-rv>Services</h2>
+    </div>
+    <p class="lede" data-rv="up" data-delay="120" style="max-width:40ch">From a single backsplash to a
+      full master suite in bookmatched stone. Residential work, Atlanta Metro.</p>
+  </div>
+  <div class="svc">
+    <div class="svc__list" id="acc">
+      <div class="acc" data-img="0">
+        <button class="acc__hd"><span class="acc__n">01</span>
+          <span class="acc__t">Bathrooms &amp; wet rooms</span><span class="acc__ic"></span></button>
+        <div class="acc__bd"><div>Full bathroom remodels built the right way round — sloped and
+          waterproofed pans, bonded flood-tested membranes, niches framed square, and stone
+          that carries its veining across every plane it meets.
+          <div class="acc__tags"><i>Curbless pans</i><i>Flood tested</i><i>Steam showers</i><i>Linear drains</i></div>
+        </div></div>
+      </div>
+      <div class="acc" data-img="1">
+        <button class="acc__hd"><span class="acc__n">02</span>
+          <span class="acc__t">Kitchens &amp; backsplashes</span><span class="acc__ic"></span></button>
+        <div class="acc__bd"><div>Full-height slab backsplashes, bookmatched range walls, handmade
+          zellige, and mitred waterfall returns — cut on site, dry-fitted, then set.
+          <div class="acc__tags"><i>Slab backsplash</i><i>Bookmatching</i><i>Zellige</i><i>Mitred edges</i></div>
+        </div></div>
+      </div>
+      <div class="acc" data-img="2">
+        <button class="acc__hd"><span class="acc__n">03</span>
+          <span class="acc__t">Natural stone &amp; marble</span><span class="acc__ic"></span></button>
+        <div class="acc__bd"><div>Marble, travertine, limestone and slate — honed, sealed and set by
+          hands that know how each one moves. Includes medallion inlay and custom border work.
+          <div class="acc__tags"><i>Carrara</i><i>Travertine</i><i>Medallions</i><i>Sealing</i></div>
+        </div></div>
+      </div>
+      <div class="acc" data-img="3">
+        <button class="acc__hd"><span class="acc__n">04</span>
+          <span class="acc__t">Floors &amp; large format</span><span class="acc__ic"></span></button>
+        <div class="acc__bd"><div>Large-format porcelain up to 5&nbsp;ft, self-levelled substrates,
+          uncoupling membranes and heated floor systems — flat planes with joints you can barely find.
+          <div class="acc__tags"><i>Self-levelling</i><i>Heated floors</i><i>Uncoupling</i><i>LFT</i></div>
+        </div></div>
+      </div>
+      <div class="acc" data-img="4">
+        <button class="acc__hd"><span class="acc__n">05</span>
+          <span class="acc__t">Fireplaces &amp; feature walls</span><span class="acc__ic"></span></button>
+        <div class="acc__bd"><div>Dry-stacked ledger stone, full-height surrounds and stacked stone
+          bars — mechanically supported, mitred at the returns, no visible raw edges.
+          <div class="acc__tags"><i>Ledger panels</i><i>Surrounds</i><i>Wet bars</i></div>
+        </div></div>
+      </div>
+      <div class="acc" data-img="5">
+        <button class="acc__hd"><span class="acc__n">06</span>
+          <span class="acc__t">Outdoor &amp; pool decks</span><span class="acc__ic"></span></button>
+        <div class="acc__bd"><div>Travertine pavers, bluestone patios, coping and pool surrounds set
+          on proper exterior systems that take a Georgia summer and a January freeze.
+          <div class="acc__tags"><i>Travertine pavers</i><i>Coping</i><i>Patios</i><i>Freeze-rated</i></div>
+        </div></div>
+      </div>
+    </div>
+    <div class="svc__stage" id="stage">
+      <img class="on" src="{{IMG:01-marble-master-bath-1100}}" alt="Marble master bathroom">
+      <img src="{{IMG:27-calacatta-viola-range-1100}}" alt="Bookmatched marble range wall">
+      <img src="{{IMG:07-foyer-medallion-1100}}" alt="Stone medallion foyer">
+      <img src="{{IMG:23-greatroom-lfp-1100}}" alt="Large format porcelain floor">
+      <img src="{{IMG:11-stone-fireplace-1100}}" alt="Stacked stone fireplace">
+      <img src="{{IMG:09-pool-deck-1100}}" alt="Travertine pool deck">
+      <figcaption class="svc__cap" id="stagecap">Bathrooms &amp; wet rooms</figcaption>
+    </div>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ works -->
+<section class="works" id="work" style="height:520vh">
+ <div class="works__sticky">
+   <div class="works__hd">
+     <div><p class="eyebrow">Selected work</p>
+       <h2 class="d3" style="margin-top:16px">Rooms we have finished</h2></div>
+     <p class="mono">Drag or scroll →</p>
+   </div>
+   <div class="works__track" id="track">
+     <figure class="card card--wide"><img src="{{IMG:01-marble-master-bath-1100}}" alt="Carrara master bath">
+       <figcaption class="card__m"><b>Carrara master suite</b><span class="mono">Buckhead</span></figcaption></figure>
+     <figure class="card card--tall"><img src="{{IMG:20-powder-room-1100}}" alt="Powder room">
+       <figcaption class="card__m"><b>Stacked marble powder room</b><span class="mono">Roswell</span></figcaption></figure>
+     <figure class="card card--wide"><img src="{{IMG:15-marble-waterfall-kitchen-1100}}" alt="Waterfall island">
+       <figcaption class="card__m"><b>Waterfall island</b><span class="mono">Sandy Springs</span></figcaption></figure>
+     <figure class="card card--tall"><img src="{{IMG:08-dark-basalt-shower-1100}}" alt="Basalt shower">
+       <figcaption class="card__m"><b>Basalt wet room</b><span class="mono">Midtown</span></figcaption></figure>
+     <figure class="card card--wide"><img src="{{IMG:02-stone-wetbar-1100}}" alt="Stacked stone wet bar">
+       <figcaption class="card__m"><b>Ledger stone wet bar</b><span class="mono">East Cobb</span></figcaption></figure>
+     <figure class="card card--tall"><img src="{{IMG:03-herringbone-shower-1100}}" alt="Herringbone shower">
+       <figcaption class="card__m"><b>Herringbone shower</b><span class="mono">Decatur</span></figcaption></figure>
+     <figure class="card card--wide"><img src="{{IMG:06-zellige-kitchen-1100}}" alt="Zellige backsplash">
+       <figcaption class="card__m"><b>Sage zellige backsplash</b><span class="mono">Virginia-Highland</span></figcaption></figure>
+     <figure class="card card--wide"><img src="{{IMG:32-outdoor-living-1100}}" alt="Outdoor living">
+       <figcaption class="card__m"><b>Covered terrace &amp; hearth</b><span class="mono">Marietta</span></figcaption></figure>
+   </div>
+   <div class="works__rail"><i id="rail"></i></div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ before / after -->
+<section class="sec">
+ <div class="wrap">
+  <div class="sechead">
+    <div class="sechead__l"><p class="eyebrow" data-rv="up">Before &amp; after</p>
+      <h2 class="d2" style="margin-top:22px" data-split data-rv>A hall bath, rebuilt</h2></div>
+    <p class="lede" data-rv="up" data-delay="120" style="max-width:38ch">Same footprint, same window,
+      same eleven days. Drag the handle.</p>
+  </div>
+  <div class="ba" id="ba" data-rv="scale">
+    <img src="{{IMG:26-before-dated-bath-1100}}" alt="Dated bathroom before renovation">
+    <img class="ba__after" id="baAfter" src="{{IMG:33-after-renovated-bath-1100}}" alt="Renovated marble bathroom">
+    <span class="ba__tag ba__tag--b">Before</span><span class="ba__tag ba__tag--a">After</span>
+    <div class="ba__bar" id="baBar"><span class="ba__knob">↔</span></div>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ process -->
+<section class="sec" id="process">
+ <div class="wrap">
+  <div class="sechead">
+    <div class="sechead__l"><p class="eyebrow" data-rv="up">How it goes</p>
+      <h2 class="d2" style="margin-top:22px" data-split data-rv>Four stages, no surprises</h2></div>
+  </div>
+  <div class="proc">
+    <div class="proc__line"><i id="procFill"></i></div>
+    <article class="step" data-rv="up">
+      <div><p class="mono">Stage 01</p><h3>Walk &amp; measure</h3></div>
+      <p>We come to the house, measure the room, look at the substrate and tell you plainly what it
+        needs. You get a written, itemised estimate — materials, labour, timeline — inside two days.</p>
+      <div class="step__fig"><img src="{{IMG:29-layout-chalklines-620}}" alt="Layout drawing and chalk lines"></div>
+    </article>
+    <article class="step" data-rv="up">
+      <div><p class="mono">Stage 02</p><h3>Layout &amp; dry fit</h3></div>
+      <p>Before a drop of mortar: substrate flattened, waterproofing applied and flood-tested, then
+        the whole field snapped and dry-laid so you can see exactly where every cut will land.</p>
+      <div class="step__fig"><img src="{{IMG:19-tools-flatlay-620}}" alt="Tile setter tools"></div>
+    </article>
+    <article class="step" data-rv="up">
+      <div><p class="mono">Stage 03</p><h3>Set</h3></div>
+      <p>Back-buttered, levelled and clipped. One crew, ours, start to finish — the same hands on
+        day one and day eleven. The site is swept and the water shut off every evening.</p>
+      <div class="step__fig"><img src="{{IMG:37-trowel-ridges-620}}" alt="Notched trowel in fresh thinset ridges"></div>
+    </article>
+    <article class="step" data-rv="up">
+      <div><p class="mono">Stage 04</p><h3>Grout, seal, walk-through</h3></div>
+      <p>Joints packed full and struck clean, stone sealed, silicone at every change of plane. Then
+        we walk it with you under a work light and fix anything you can find.</p>
+      <div class="step__fig"><img src="{{IMG:24-grout-detail-620}}" alt="Grout joint detail"></div>
+    </article>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ maker -->
+<section class="sec" id="maker">
+ <div class="wrap maker">
+   <figure class="maker__fig" style="margin:0" data-rv="scale">
+     <img src="{{IMG:34-sample-stack-1100}}" alt="Stone samples and tools in the workshop" data-par="0.09">
+   </figure>
+   <div>
+     <p class="eyebrow" data-rv="up">The bench</p>
+     <h2 class="d2" style="margin:24px 0 0" data-split data-rv>Twenty-four years, one trade</h2>
+     <p class="lede" style="margin-top:28px" data-rv="up" data-delay="140">
+       DTI began with one van, one apprentice and a rule that has not changed since: we do not
+       leave a room we would not live in. No subcontracted crews, no rotating faces, no
+       disappearing for a fortnight on another job.
+     </p>
+     <p class="lede" style="margin-top:18px" data-rv="up" data-delay="220">
+       Most of our work now comes from designers and builders who send us the rooms they cannot
+       afford to have go wrong — and from homeowners who had us once and would not now call
+       anybody else.
+     </p>
+     <p class="maker__sig" data-rv="up" data-delay="300">Detail and such.</p>
+   </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ voices -->
+<section class="sec" style="background:var(--ink2)">
+ <div class="wrap">
+  <p class="eyebrow" data-rv="up">In their words</p>
+  <div class="voices" style="margin-top:44px" id="voices">
+    <blockquote class="voice on"><p>They rebuilt a shower two other outfits had already
+      failed at. Flood tested it in front of me. Four years on, not a hairline anywhere.</p>
+      <cite><b>Homeowner</b> Sandy Springs · Master bath</cite></blockquote>
+    <blockquote class="voice"><p>I specify a lot of stone. DTI are the only setters
+      I hand a bookmatched slab to without holding my breath.</p>
+      <cite><b>Interior designer</b> Buckhead · Kitchen &amp; bar</cite></blockquote>
+    <blockquote class="voice"><p>Eleven days, quoted. Eleven days, done. Swept the site
+      every single evening. That never happens.</p>
+      <cite><b>Homeowner</b> Marietta · Hall bath</cite></blockquote>
+  </div>
+  <div class="dots" id="dots"></div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ areas -->
+<section class="sec" id="areas" style="padding-bottom:0">
+ <div class="wrap">
+  <div class="sechead"><div class="sechead__l"><p class="eyebrow" data-rv="up">Where we work</p>
+    <h2 class="d2" style="margin-top:22px" data-split data-rv>Atlanta Metro</h2></div>
+    <p class="lede" data-rv="up" data-delay="120" style="max-width:34ch">Inside the perimeter and well
+      beyond it. If your town is not listed, call anyway.</p></div>
+  <div class="areas" data-rv="up">
+    <a href="#contact"><span>Buckhead</span></a><a href="#contact"><span>Sandy Springs</span></a>
+    <a href="#contact"><span>Marietta</span></a><a href="#contact"><span>Roswell</span></a>
+    <a href="#contact"><span>Alpharetta</span></a><a href="#contact"><span>Dunwoody</span></a>
+    <a href="#contact"><span>Decatur</span></a><a href="#contact"><span>Brookhaven</span></a>
+    <a href="#contact"><span>Smyrna</span></a><a href="#contact"><span>Johns Creek</span></a>
+    <a href="#contact"><span>East Cobb</span></a><a href="#contact"><span>Vinings</span></a>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ contact -->
+<section class="sec cta" id="contact">
+  <div class="cta__bg" data-par="0.16"><img src="{{IMG:16-curbless-wetroom-1800}}" alt=""></div>
+  <div class="cta__veil"></div>
+  <div class="wrap contactgrid">
+    <div>
+      <p class="eyebrow" data-rv="up">Start a room</p>
+      <h2 class="d2" style="margin:24px 0 0;max-width:12ch" data-split data-rv>Tell us what you are building</h2>
+      <p class="lede" style="margin-top:26px" data-rv="up" data-delay="140">Send the room, the stone
+        you have in mind and roughly when. We answer every enquiry within one business day —
+        or just call, we generally pick up.</p>
+      <dl class="cinfo" data-rv="up" data-delay="220">
+        <dt>Telephone</dt><dd><a href="tel:4043848819">404.384.8819</a></dd>
+        <dt>Service area</dt><dd>Atlanta Metro, Georgia</dd>
+        <dt>Hours</dt><dd>Mon – Sat · 7am – 6pm</dd>
+      </dl>
+    </div>
+    <form class="form" id="form" novalidate data-rv="up" data-delay="180">
+      <div class="field"><input id="f1" name="name" required><label for="f1">Your name</label><i class="field__u"></i></div>
+      <div class="field"><input id="f2" name="phone" type="tel" required><label for="f2">Phone</label><i class="field__u"></i></div>
+      <div class="field full"><input id="f3" name="email" type="email" required><label for="f3">Email</label><i class="field__u"></i></div>
+      <div class="field full"><select id="f4" name="scope">
+        <option>What are you tiling?</option><option>Bathroom / wet room</option>
+        <option>Kitchen / backsplash</option><option>Flooring</option>
+        <option>Fireplace / feature wall</option><option>Outdoor / pool deck</option>
+        <option>Repair or regrout</option><option>Something else</option>
+      </select><i class="field__u"></i></div>
+      <div class="field full"><textarea id="f5" name="msg" rows="3"></textarea>
+        <label for="f5">The room, the stone, the timing</label><i class="field__u"></i></div>
+      <div class="full"><button class="btn btn--solid magnetic" type="submit" style="width:100%">
+        <span>Send enquiry</span></button></div>
+      <div class="sent full" id="sent">{{SVG:mark-a-lozenge}}
+        <div><b style="font-family:var(--ff-d);font-size:1.3rem;display:block">Thank you — that is with us.</b>
+        <span class="mono">We reply within one business day · demo form, nothing was sent</span></div></div>
+    </form>
+  </div>
+</section>
+</main>
+
+<!-- ══════════════════════════════════════════════ footer -->
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot__top">
+      <div>
+        <a class="brand" href="#top">{{SVG:mark-a-lozenge}}
+          <span class="brand__tx"><b>DTI</b><s>Tile Atelier</s></span></a>
+        <p class="lede" style="margin-top:22px;max-width:30ch;font-size:.9rem">
+          Tile and natural stone installation. Atlanta Metro, Georgia.</p>
+      </div>
+      <div class="foot__cols">
+        <div><h5>Services</h5><ul>
+          <li><a href="#services">Bathrooms</a></li><li><a href="#services">Kitchens</a></li>
+          <li><a href="#services">Natural stone</a></li><li><a href="#services">Flooring</a></li>
+          <li><a href="#services">Outdoor</a></li></ul></div>
+        <div><h5>Studio</h5><ul>
+          <li><a href="#work">Work</a></li><li><a href="#process">Process</a></li>
+          <li><a href="#maker">About</a></li><li><a href="#contact">Contact</a></li></ul></div>
+        <div><h5>Reach us</h5><ul>
+          <li><a href="tel:4043848819">404.384.8819</a></li>
+          <li><a href="#contact">Request an estimate</a></li>
+          <li><a href="#areas">Atlanta Metro</a></li></ul></div>
+      </div>
+    </div>
+    <p class="giant" aria-hidden="true">DTI TILE</p>
+    <div class="foot__bar">
+      <span>© 2026 DTITile — All rights reserved.</span>
+      <span>Precision and polish, detail and such.</span>
+    </div>
+  </div>
+</footer>
+<div class="demo-note">Concept A · Atelier</div>
+
+<script>
+(function(){
+"use strict";
+var RM = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+var COARSE = window.matchMedia("(pointer: coarse)").matches;
+var $  = function(s,c){return (c||document).querySelector(s)};
+var $$ = function(s,c){return Array.prototype.slice.call((c||document).querySelectorAll(s))};
+var clamp = function(v,a,b){return v<a?a:v>b?b:v};
+
+/* ─────────────────────────────────────────── 1. split text into masked words */
+$$("[data-split]").forEach(function(el){
+  var walk = function(node){
+    Array.prototype.slice.call(node.childNodes).forEach(function(n){
+      if(n.nodeType === 3){
+        var frag = document.createDocumentFragment();
+        n.textContent.split(/(\s+)/).forEach(function(tok){
+          if(!tok) return;
+          if(/^\s+$/.test(tok)){ frag.appendChild(document.createTextNode(tok)); return; }
+          var s = document.createElement("span"); s.className = "msk";
+          var i = document.createElement("i"); i.textContent = tok;
+          s.appendChild(i); frag.appendChild(s);
+        });
+        node.replaceChild(frag, n);
+      } else if(n.nodeType === 1 && !n.classList.contains("msk")) walk(n);
+    });
+  };
+  walk(el);
+  $$(".msk > i", el).forEach(function(i,k){ i.style.transitionDelay = (k*52)+"ms"; });
+});
+
+/* ─────────────────────────────────────────── 2. reveal engine */
+var io = new IntersectionObserver(function(es){
+  es.forEach(function(e){
+    if(!e.isIntersecting) return;
+    var el = e.target, d = +(el.dataset.delay||0);
+    setTimeout(function(){ el.classList.add("in"); }, d);
+    io.unobserve(el);
+  });
+}, {threshold:.13, rootMargin:"0px 0px -8% 0px"});
+$$("[data-rv],[data-split],.fig,.step").forEach(function(el){ io.observe(el); });
+
+/* ─────────────────────────────────────────── 3. loader choreography */
+var loader = $("#loader"), lnum = $("#lnum"), lbar = $("#lbar"), curtain = $("#curtain");
+function startHero(){
+  var h = $("[data-hero]"); if(h) h.classList.add("rv");
+}
+if(RM){
+  loader.classList.add("done"); curtain.classList.add("up"); startHero();
+} else {
+  var p = 0, t0 = performance.now(), DUR = 1250;
+  (function tick(now){
+    var k = clamp((now-t0)/DUR, 0, 1);
+    p = Math.round((1-Math.pow(1-k,3))*100);
+    lnum.textContent = p < 10 ? "0"+p : p;
+    lbar.style.transform = "scaleX("+(p/100)+")";
+    if(k < 1) requestAnimationFrame(tick);
+    else {
+      loader.classList.add("done");
+      $$("#curtain i").forEach(function(el,i){ el.style.transitionDelay = (i*68)+"ms"; });
+      curtain.classList.add("up");
+      setTimeout(startHero, 300);
+    }
+  })(t0);
+}
+
+/* ─────────────────────────────────────────── 4. cursor */
+if(!COARSE && !RM){
+  document.body.classList.add("has-cursor");
+  var cd = $(".cur"), cr = $(".cur-r"), mx=innerWidth/2, my=innerHeight/2, rx=mx, ry=my;
+  addEventListener("mousemove", function(e){ mx=e.clientX; my=e.clientY;
+    cd.style.transform = "translate3d("+mx+"px,"+my+"px,0)"; }, {passive:true});
+  (function loop(){ rx += (mx-rx)*.16; ry += (my-ry)*.16;
+    cr.style.transform = "translate3d("+rx+"px,"+ry+"px,0)"; requestAnimationFrame(loop); })();
+  $$("a,button,.card,.ba,.acc__hd").forEach(function(el){
+    el.addEventListener("mouseenter", function(){ document.body.classList.add("cur-lg"); });
+    el.addEventListener("mouseleave", function(){ document.body.classList.remove("cur-lg"); });
+  });
+}
+
+/* ─────────────────────────────────────────── 5. magnetic buttons */
+if(!COARSE && !RM) $$(".magnetic").forEach(function(el){
+  el.addEventListener("mousemove", function(e){
+    var r = el.getBoundingClientRect();
+    var x = (e.clientX - r.left - r.width/2) * .28;
+    var y = (e.clientY - r.top - r.height/2) * .38;
+    el.style.transform = "translate("+x+"px,"+y+"px)";
+    el.style.transition = "transform .1s linear";
+  });
+  el.addEventListener("mouseleave", function(){
+    el.style.transition = "transform .65s cubic-bezier(.22,1,.36,1)";
+    el.style.transform = "";
+  });
+});
+
+/* ─────────────────────────────────────────── 6. nav state */
+var nav = $("#nav"), lastY = 0;
+function navState(y){
+  nav.classList.toggle("stuck", y > 40);
+  nav.classList.toggle("hide", y > 620 && y > lastY && !document.body.classList.contains("menu"));
+  lastY = y;
+}
+$("#burger").addEventListener("click", function(){ document.body.classList.toggle("menu"); });
+$$("#sheet a").forEach(function(a){ a.addEventListener("click", function(){
+  document.body.classList.remove("menu"); }); });
+
+/* ─────────────────────────────────────────── 7. smooth scroll (wheel lerp) */
+var target = window.scrollY, curr = target, smoothing = !RM && !COARSE, animating = false;
+function maxY(){ return Math.max(0, document.documentElement.scrollHeight - innerHeight); }
+if(smoothing){
+  addEventListener("wheel", function(e){
+    if(e.ctrlKey || document.body.classList.contains("menu")) return;
+    e.preventDefault();
+    target = clamp(target + e.deltaY * (e.deltaMode === 1 ? 22 : 1), 0, maxY());
+    if(!animating){ animating = true; requestAnimationFrame(smoothLoop); }
+  }, {passive:false});
+  addEventListener("scroll", function(){
+    if(!animating) target = curr = window.scrollY;
+  }, {passive:true});
+}
+function smoothLoop(){
+  curr += (target - curr) * .105;
+  if(Math.abs(target - curr) < .4){ curr = target; animating = false; }
+  window.scrollTo(0, curr);
+  if(animating) requestAnimationFrame(smoothLoop);
+}
+$$('a[href^="#"]').forEach(function(a){
+  a.addEventListener("click", function(e){
+    var el = document.getElementById(a.getAttribute("href").slice(1));
+    if(!el) return;
+    e.preventDefault();
+    var y = el.getBoundingClientRect().top + window.scrollY - 70;
+    if(smoothing){ target = clamp(y,0,maxY()); if(!animating){ animating=true; requestAnimationFrame(smoothLoop);} }
+    else window.scrollTo({top:y, behavior:"smooth"});
+  });
+});
+
+/* ─────────────────────────────────────────── 8. scroll-driven effects */
+var prog = $("#prog"), pars = $$("[data-par]"),
+    works = $(".works"), track = $("#track"), rail = $("#rail"),
+    procLine = $(".proc__line"), procFill = $("#procFill");
+function onScroll(){
+  var y = window.scrollY, vh = innerHeight;
+  navState(y);
+  prog.style.transform = "scaleX(" + (y / (maxY()||1)) + ")";
+
+  /* parallax */
+  pars.forEach(function(el){
+    var r = el.parentElement.getBoundingClientRect();
+    if(r.bottom < -200 || r.top > vh + 200) return;
+    var mid = r.top + r.height/2 - vh/2;
+    el.style.transform = "translate3d(0," + (-mid * +el.dataset.par).toFixed(2) + "px,0)";
+  });
+
+  /* pinned horizontal gallery */
+  if(works && track){
+    var wr = works.getBoundingClientRect();
+    var span = works.offsetHeight - vh;
+    var k = clamp(-wr.top / (span||1), 0, 1);
+    var dist = Math.max(0, track.scrollWidth - innerWidth + 40);
+    track.style.transform = "translate3d(" + (-k*dist).toFixed(1) + "px,0,0)";
+    rail.style.transform = "scaleX(" + k + ")";
+  }
+
+  /* process progress line */
+  if(procLine && procFill){
+    var pr = procLine.getBoundingClientRect();
+    var k2 = clamp((vh*0.72 - pr.top) / (pr.height||1), 0, 1);
+    procFill.style.transform = "scaleY(" + k2 + ")";
+  }
+}
+addEventListener("scroll", onScroll, {passive:true});
+addEventListener("resize", onScroll);
+onScroll();
+
+/* ─────────────────────────────────────────── 9. counters */
+$$("[data-count]").forEach(function(el){
+  var done = false;
+  var ob = new IntersectionObserver(function(es){
+    if(!es[0].isIntersecting || done) return;
+    done = true; ob.disconnect();
+    var to = +el.dataset.count, sfx = el.dataset.suffix||"", t0 = performance.now(), D = 1700;
+    (function run(n){
+      var k = clamp((n-t0)/D,0,1), e = 1-Math.pow(1-k,3);
+      el.textContent = Math.round(to*e).toLocaleString("en-US") + sfx;
+      if(k<1) requestAnimationFrame(run);
+    })(t0);
+  }, {threshold:.5});
+  ob.observe(el);
+});
+
+/* ─────────────────────────────────────────── 10. services accordion */
+var accs = $$("#acc .acc"), shots = $$("#stage img"), cap = $("#stagecap");
+function openAcc(a){
+  accs.forEach(function(o){
+    var bd = $(".acc__bd", o);
+    if(o === a){ o.classList.add("open"); bd.style.height = $("div", bd).offsetHeight + "px"; }
+    else { o.classList.remove("open"); bd.style.height = "0px"; }
+  });
+  var i = +a.dataset.img;
+  shots.forEach(function(s,k){ s.classList.toggle("on", k === i); });
+  cap.textContent = $(".acc__t", a).textContent;
+}
+accs.forEach(function(a){
+  $(".acc__hd", a).addEventListener("click", function(){
+    if(a.classList.contains("open")){ a.classList.remove("open"); $(".acc__bd",a).style.height="0px"; }
+    else openAcc(a);
+  });
+  a.addEventListener("mouseenter", function(){
+    if(COARSE) return;
+    var i = +a.dataset.img;
+    shots.forEach(function(s,k){ s.classList.toggle("on", k === i); });
+    cap.textContent = $(".acc__t", a).textContent;
+  });
+});
+if(accs[0]) openAcc(accs[0]);
+addEventListener("resize", function(){
+  var o = $("#acc .acc.open");
+  if(o) $(".acc__bd", o).style.height = $(".acc__bd > div", o).offsetHeight + "px";
+});
+
+/* ─────────────────────────────────────────── 11. before / after */
+(function(){
+  var ba = $("#ba"); if(!ba) return;
+  var after = $("#baAfter"), bar = $("#baBar"), drag = false;
+  function set(clientX){
+    var r = ba.getBoundingClientRect();
+    var p = clamp((clientX - r.left) / r.width, .02, .98);
+    after.style.clipPath = "inset(0 0 0 " + (p*100) + "%)";
+    bar.style.left = (p*100) + "%";
+  }
+  var down = function(e){ drag = true; set((e.touches?e.touches[0]:e).clientX); };
+  var move = function(e){ if(!drag) return; set((e.touches?e.touches[0]:e).clientX); };
+  var up   = function(){ drag = false; };
+  ba.addEventListener("mousedown", down);  addEventListener("mousemove", move);
+  addEventListener("mouseup", up);
+  ba.addEventListener("touchstart", down, {passive:true});
+  ba.addEventListener("touchmove", move, {passive:true});
+  addEventListener("touchend", up);
+  ba.addEventListener("mousemove", function(e){ if(!drag && !COARSE) set(e.clientX); });
+  /* invite: sweep once when first seen */
+  var seen = false;
+  new IntersectionObserver(function(es){
+    if(!es[0].isIntersecting || seen || RM) return; seen = true;
+    var r = ba.getBoundingClientRect(), t0 = performance.now();
+    (function sweep(n){
+      var k = clamp((n-t0)/1500,0,1), e = k<.5 ? 2*k*k : 1-Math.pow(-2*k+2,2)/2;
+      var p = .5 + Math.sin(e*Math.PI)*.22;
+      after.style.clipPath = "inset(0 0 0 "+(p*100)+"%)"; bar.style.left = (p*100)+"%";
+      if(k<1) requestAnimationFrame(sweep);
+    })(t0);
+  }, {threshold:.4}).observe(ba);
+})();
+
+/* ─────────────────────────────────────────── 12. testimonials */
+(function(){
+  var vs = $$("#voices .voice"), dots = $("#dots"), i = 0, timer;
+  if(!vs.length) return;
+  vs.forEach(function(_,k){
+    var b = document.createElement("button");
+    b.innerHTML = "<i></i>"; b.setAttribute("aria-label","Testimonial "+(k+1));
+    b.addEventListener("click", function(){ go(k); });
+    dots.appendChild(b);
+  });
+  var btns = $$("button", dots);
+  function go(k){
+    i = k;
+    vs.forEach(function(v,n){ v.classList.toggle("on", n===k); });
+    btns.forEach(function(b,n){
+      b.classList.remove("on"); void b.offsetWidth;
+      if(n===k) b.classList.add("on");
+    });
+    clearTimeout(timer); timer = setTimeout(function(){ go((i+1)%vs.length); }, 6500);
+  }
+  go(0);
+})();
+
+/* ─────────────────────────────────────────── 13. form */
+var form = $("#form");
+$$(".field input,.field textarea").forEach(function(el){
+  var sync = function(){ el.parentElement.classList.toggle("filled", !!el.value); };
+  el.addEventListener("input", sync); el.addEventListener("blur", sync);
+});
+form.addEventListener("submit", function(e){
+  e.preventDefault();
+  $("#sent").classList.add("on");
+  form.querySelector('button[type="submit"]').style.display = "none";
+});
+
+/* ─────────────────────────────────────────── 14. ribbon: duplicate for seamless loop */
+(function(){
+  var r = $("#ribbon"); if(!r) return;
+  r.innerHTML += r.innerHTML;
+})();
+})();
+</script>

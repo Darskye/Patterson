@@ -1,0 +1,804 @@
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DTI Tile Journal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,300;1,9..144,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ══════════════════════════════════════════════ tokens */
+:root{
+  --paper:#F5F0E7; --paper2:#EBE3D5; --paper3:#E1D7C5;
+  --ink:#1E1B16; --ink2:#40392F; --soft:#7A7161;
+  --clay:#B0532B; --sage:#6E7A63;
+  --rule:rgba(30,27,22,.16); --rule2:rgba(30,27,22,.08);
+  --ff-d:"Fraunces",Georgia,"Times New Roman",serif;
+  --ff-b:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --pad:clamp(18px,4.4vw,68px);
+  --e:cubic-bezier(.19,1,.22,1);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--ff-b);
+  font-weight:300;line-height:1.62;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+img{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+button,input,textarea,select{font:inherit;color:inherit}
+::selection{background:var(--clay);color:var(--paper)}
+figure{margin:0}
+
+/* paper grain */
+body::before{content:"";position:fixed;inset:0;z-index:900;pointer-events:none;opacity:.4;
+  background-image:radial-gradient(rgba(30,27,22,.055) 1px,transparent 1px);
+  background-size:3px 3px;mix-blend-mode:multiply}
+
+/* ══════════════════════════════════════════════ type */
+h1,h2,h3,h4{font-family:var(--ff-d);margin:0;font-weight:300;line-height:1.06;
+  letter-spacing:-.018em;font-variation-settings:"SOFT" 0,"WONK" 1}
+.d1{font-size:clamp(2.9rem,7.6vw,7rem)}
+.d2{font-size:clamp(2.1rem,4.7vw,4.1rem)}
+.d3{font-size:clamp(1.45rem,2.5vw,2.25rem)}
+.kicker{font-family:var(--ff-b);font-size:.6rem;font-weight:500;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--clay)}
+.meta{font-family:var(--ff-b);font-size:.6rem;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--soft)}
+.body{font-size:1.02rem;line-height:1.82;color:var(--ink2);max-width:64ch}
+.body--s{font-size:.93rem;line-height:1.78}
+.it{font-style:italic}
+.rule{height:1px;background:var(--rule);border:0;margin:0}
+.rule--th{height:2px;background:var(--ink)}
+
+/* section number tab, magazine style */
+.numtab{display:flex;align-items:baseline;gap:16px;border-top:2px solid var(--ink);
+  padding-top:12px;margin-bottom:clamp(26px,4vh,52px)}
+.numtab b{font-family:var(--ff-d);font-size:1.05rem;font-weight:500}
+.numtab span{font-family:var(--ff-b);font-size:.6rem;letter-spacing:.3em;text-transform:uppercase;
+  color:var(--soft)}
+.numtab i{flex:1;height:1px;background:var(--rule);align-self:center}
+
+/* ══════════════════════════════════════════════ reveal */
+[data-rv]{opacity:0;transition:opacity 1.15s var(--e),transform 1.15s var(--e),
+  clip-path 1.3s var(--e)}
+[data-rv="up"]{transform:translateY(30px)}
+[data-rv="clip"],[data-rv="clipl"]{opacity:1;position:relative}
+[data-rv="clip"]::after,[data-rv="clipl"]::after{content:"";position:absolute;inset:0;z-index:4;
+  background:var(--paper);transition:transform 1.15s var(--e)}
+[data-rv="clip"]::after{transform-origin:50% 100%;transform:scaleY(1)}
+[data-rv="clipl"]::after{transform-origin:100% 50%;transform:scaleX(1)}
+[data-rv="clip"].in::after{transform:scaleY(0)}
+[data-rv="clipl"].in::after{transform:scaleX(0)}
+[data-rv="scale"]{transform:scale(1.05)}
+[data-rv].in{opacity:1;transform:none;clip-path:inset(0 0 0 0)}
+@media(prefers-reduced-motion:reduce){
+  [data-rv]{opacity:1!important;transform:none!important;clip-path:none!important}
+  *{animation-duration:.01ms!important;transition-duration:.01ms!important}
+}
+
+/* ══════════════════════════════════════════════ masthead */
+.mast{position:sticky;top:0;z-index:800;background:var(--paper);
+  border-bottom:1px solid var(--rule);transition:box-shadow .5s var(--e)}
+.mast.stuck{box-shadow:0 12px 34px -28px rgba(30,27,22,.7)}
+.mast__in{display:flex;align-items:center;justify-content:space-between;gap:20px;
+  padding:12px var(--pad)}
+.seal{display:flex;align-items:center;gap:12px}
+.seal svg{width:40px;height:40px;color:var(--ink);flex:none;transition:transform 1.1s var(--e)}
+.seal:hover svg{transform:rotate(60deg)}
+.seal b{font-family:var(--ff-d);font-size:1.24rem;font-weight:500;letter-spacing:-.01em;
+  line-height:1.05;display:block}
+.seal s{display:block;text-decoration:none;font-size:.54rem;letter-spacing:.26em;
+  text-transform:uppercase;color:var(--soft);margin-top:2px}
+.mnav{display:flex;gap:clamp(12px,1.9vw,30px)}
+.mnav a{font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);
+  position:relative;padding:4px 0}
+.mnav a::after{content:"";position:absolute;left:0;bottom:0;width:100%;height:1px;
+  background:var(--clay);transform:scaleX(0);transform-origin:0 50%;
+  transition:transform .5s var(--e)}
+.mnav a:hover::after{transform:scaleX(1)}
+.mast__r{display:flex;align-items:center;gap:14px}
+.pill{display:inline-flex;align-items:center;gap:.6em;border:1px solid var(--ink);
+  border-radius:999px;padding:11px 21px;font-size:.66rem;letter-spacing:.18em;
+  text-transform:uppercase;position:relative;overflow:hidden;cursor:pointer;background:none;
+  transition:color .5s var(--e)}
+.pill span{position:relative;z-index:1}
+.pill::before{content:"";position:absolute;inset:0;background:var(--ink);
+  transform:translateY(101%);transition:transform .55s var(--e)}
+.pill:hover{color:var(--paper)}
+.pill:hover::before{transform:none}
+.pill--clay{background:var(--clay);border-color:var(--clay);color:var(--paper)}
+.pill--clay::before{background:var(--ink)}
+.pill--clay:hover{color:var(--paper)}
+.tel2{font-family:var(--ff-d);font-size:1.02rem;white-space:nowrap}
+.burger{display:none;width:38px;height:38px;border:1px solid var(--rule);border-radius:50%;
+  background:none;cursor:pointer;place-items:center}
+.burger i{width:14px;height:1px;background:var(--ink);display:block;position:relative}
+.burger i::before,.burger i::after{content:"";position:absolute;left:0;width:14px;height:1px;
+  background:var(--ink);transition:transform .4s var(--e)}
+.burger i::before{top:-4px}.burger i::after{top:4px}
+body.menu .burger i{background:transparent}
+body.menu .burger i::before{transform:translateY(4px) rotate(45deg)}
+body.menu .burger i::after{transform:translateY(-4px) rotate(-45deg)}
+.sheet{position:fixed;inset:0;z-index:790;background:var(--paper2);padding:96px var(--pad) 36px;
+  display:flex;flex-direction:column;justify-content:space-between;
+  transform:translateY(-101%);transition:transform .78s var(--e);visibility:hidden}
+body.menu .sheet{transform:none;visibility:visible}
+.sheet a.big{font-family:var(--ff-d);font-size:clamp(1.9rem,8vw,3.2rem);display:block;
+  padding:11px 0;border-bottom:1px solid var(--rule)}
+
+/* running strip */
+.strip{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  padding:9px var(--pad);border-bottom:1px solid var(--rule);background:var(--paper2)}
+
+/* ══════════════════════════════════════════════ hero */
+.hero{padding:clamp(30px,6vh,70px) var(--pad) 0}
+.hero__grid{display:grid;grid-template-columns:1fr;gap:clamp(24px,3.6vw,54px);
+  align-items:end;max-width:1620px;margin:0 auto}
+@media(min-width:960px){.hero__grid{grid-template-columns:1.02fr .98fr}}
+.hero h1{margin:.1em 0 0}
+.hero h1 em{font-style:italic;color:var(--clay)}
+.hero__meta{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:26px;padding-top:16px;
+  border-top:1px solid var(--rule)}
+.hero__fig{position:relative;overflow:hidden;aspect-ratio:4/3.1}
+.hero__fig img{width:100%;height:108%;object-fit:cover;will-change:transform}
+.hero__cap{position:absolute;left:14px;bottom:14px;background:var(--paper);padding:9px 15px;
+  font-size:.58rem;letter-spacing:.22em;text-transform:uppercase}
+.hero__band{max-width:1620px;margin:clamp(28px,5vh,64px) auto 0;
+  border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  display:grid;grid-template-columns:repeat(2,1fr);gap:1px;background:var(--rule2)}
+@media(min-width:820px){.hero__band{grid-template-columns:repeat(4,1fr)}}
+.hero__band div{background:var(--paper);padding:20px 22px}
+.hero__band b{font-family:var(--ff-d);font-size:1.75rem;font-weight:400;display:block;
+  line-height:1}
+.hero__band small{display:block;margin-top:7px;font-size:.58rem;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--soft)}
+
+/* ══════════════════════════════════════════════ layout */
+.sec{padding:clamp(60px,10vh,132px) var(--pad)}
+.wrap{max-width:1620px;margin:0 auto}
+.narrow{max-width:980px;margin:0 auto}
+
+/* intro w/ drop cap + margin note */
+.intro{display:grid;grid-template-columns:1fr;gap:clamp(24px,4vw,64px)}
+@media(min-width:920px){.intro{grid-template-columns:.24fr .76fr}}
+.marginote{font-size:.76rem;line-height:1.7;color:var(--soft);border-top:1px solid var(--ink);
+  padding-top:12px}
+.marginote b{display:block;font-family:var(--ff-d);font-size:.95rem;color:var(--ink);
+  margin-bottom:6px;font-weight:500}
+.dropcap::first-letter{font-family:var(--ff-d);float:left;font-size:4.6em;line-height:.78;
+  padding:.06em .1em 0 0;font-weight:400;color:var(--clay)}
+.intro p+p{margin-top:1.1em}
+
+/* ══════════════════════════════════════════════ work grid (magazine) */
+.grid{display:grid;grid-template-columns:repeat(6,1fr);gap:clamp(12px,1.8vw,26px)}
+.g-item{grid-column:span 6}
+@media(min-width:760px){
+  .g-6{grid-column:span 6}.g-4{grid-column:span 4}.g-3{grid-column:span 3}.g-2{grid-column:span 2}
+}
+.plate{position:relative;overflow:hidden;background:var(--paper3)}
+.plate img{width:100%;height:100%;object-fit:cover;transition:transform 1.5s var(--e),
+  filter 1s var(--e)}
+.plate:hover img{transform:scale(1.045)}
+.g-item figcaption{display:flex;justify-content:space-between;gap:14px;align-items:baseline;
+  padding-top:11px;margin-top:11px;border-top:1px solid var(--rule)}
+.g-item h3{font-size:1.12rem;font-weight:400;letter-spacing:-.005em}
+.ar43{aspect-ratio:4/3}.ar11{aspect-ratio:1/1}.ar34{aspect-ratio:3/4}.ar169{aspect-ratio:16/9}
+.ar32{aspect-ratio:3/2}
+
+/* ══════════════════════════════════════════════ specimen swatches */
+.spec{display:grid;grid-template-columns:repeat(2,1fr);gap:clamp(12px,1.8vw,24px)}
+@media(min-width:800px){.spec{grid-template-columns:repeat(4,1fr)}}
+.swatch{position:relative;overflow:hidden;aspect-ratio:3/4;background:var(--paper3)}
+.swatch img{width:100%;height:100%;object-fit:cover;transition:transform 1.4s var(--e)}
+.swatch:hover img{transform:scale(1.07)}
+.swatch__l{position:absolute;left:0;right:0;bottom:0;background:var(--paper);
+  padding:13px 15px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;
+  transform:translateY(101%);transition:transform .6s var(--e)}
+.swatch:hover .swatch__l,.swatch:focus-within .swatch__l{transform:none}
+.swatch__n{position:absolute;left:12px;top:12px;background:var(--paper);
+  width:26px;height:26px;display:grid;place-items:center;font-family:var(--ff-d);font-size:.8rem}
+
+/* ══════════════════════════════════════════════ index list (TOC style) */
+.toc{border-top:1px solid var(--ink)}
+.toc__row{display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:baseline;
+  padding:clamp(15px,2vw,23px) 0;border-bottom:1px solid var(--rule);position:relative;
+  cursor:pointer;transition:padding-left .55s var(--e)}
+.toc__row:hover{padding-left:14px}
+.toc__row::before{content:"";position:absolute;left:0;right:0;top:0;bottom:0;
+  background:var(--paper2);opacity:0;transition:opacity .45s var(--e);z-index:-1}
+.toc__row:hover::before{opacity:1}
+.toc__n{font-family:var(--ff-b);font-size:.6rem;letter-spacing:.2em;color:var(--clay);
+  width:26px;flex:none}
+.toc__t{font-family:var(--ff-d);font-size:clamp(1.25rem,2.4vw,2rem);font-weight:300;
+  display:flex;align-items:baseline;gap:14px;min-width:0}
+.toc__t i{flex:1;height:1px;background:var(--rule);align-self:center;min-width:20px}
+.toc__t em{font-style:normal;font-family:var(--ff-b);font-size:.66rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--soft);white-space:nowrap}
+.toc__x{font-family:var(--ff-d);font-size:1.2rem;color:var(--clay);
+  transition:transform .5s var(--e)}
+.toc__row.open .toc__x{transform:rotate(45deg)}
+.toc__bd{overflow:hidden;height:0;transition:height .6s var(--e)}
+.toc__bd>div{padding:0 0 24px 40px;display:grid;grid-template-columns:1fr;gap:20px}
+@media(min-width:820px){.toc__bd>div{grid-template-columns:1.1fr .9fr;align-items:start}}
+.toc__bd img{aspect-ratio:16/10;object-fit:cover;width:100%}
+
+/* ══════════════════════════════════════════════ pull quote */
+.pq{background:var(--ink);color:var(--paper);padding:clamp(52px,9vh,120px) var(--pad);
+  position:relative;overflow:hidden}
+.pq blockquote{margin:0;max-width:22ch;font-family:var(--ff-d);
+  font-size:clamp(1.9rem,5vw,4.2rem);line-height:1.1;font-weight:300;position:relative}
+@media(min-width:900px){.pq blockquote{max-width:19ch}}
+.pq blockquote::before{content:"\201C";position:absolute;left:-.52em;top:-.06em;
+  color:var(--clay);font-size:1.5em;line-height:1}
+.pq cite{display:block;margin-top:32px;font-style:normal;font-size:.62rem;letter-spacing:.26em;
+  text-transform:uppercase;color:rgba(245,240,231,.6)}
+.pq__fig{position:absolute;right:0;top:0;bottom:0;width:44%;opacity:.3;display:none}
+@media(min-width:1000px){.pq__fig{display:block}}
+.pq__fig img{width:100%;height:100%;object-fit:cover;filter:grayscale(.35)}
+.pq__fig::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(90deg,var(--ink),transparent 62%)}
+
+/* ══════════════════════════════════════════════ process */
+.proc{display:grid;grid-template-columns:1fr;gap:clamp(20px,2.6vw,38px)}
+@media(min-width:760px){.proc{grid-template-columns:repeat(2,1fr)}}
+@media(min-width:1180px){.proc{grid-template-columns:repeat(4,1fr)}}
+.pcard{border-top:2px solid var(--ink);padding-top:16px}
+.pcard b{font-family:var(--ff-d);font-size:2.5rem;font-weight:300;color:var(--paper3);
+  display:block;line-height:.9;transition:color .7s var(--e)}
+.pcard.in b{color:var(--clay)}
+.pcard h3{font-size:1.24rem;margin:12px 0 9px;font-weight:400}
+
+/* ══════════════════════════════════════════════ maker */
+.maker{display:grid;grid-template-columns:1fr;gap:clamp(26px,4.4vw,64px);align-items:center}
+@media(min-width:920px){.maker{grid-template-columns:.86fr 1.14fr}}
+.maker__fig{position:relative;overflow:hidden;aspect-ratio:4/5}
+.maker__fig img{width:100%;height:108%;object-fit:cover;will-change:transform}
+.sig{font-family:var(--ff-d);font-style:italic;font-size:1.85rem;color:var(--clay);
+  margin-top:26px}
+
+/* ══════════════════════════════════════════════ voices */
+.voices{display:grid;grid-template-columns:1fr;gap:clamp(20px,2.6vw,34px)}
+@media(min-width:840px){.voices{grid-template-columns:repeat(3,1fr)}}
+.vc{border-top:1px solid var(--ink);padding-top:18px}
+.vc p{font-family:var(--ff-d);font-size:1.16rem;line-height:1.48;margin:0 0 18px;
+  font-weight:300}
+.vc cite{font-style:normal;font-size:.58rem;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--soft);display:block}
+.vc cite b{display:block;color:var(--clay);margin-bottom:5px;font-weight:500}
+
+/* ══════════════════════════════════════════════ areas */
+.setline{font-family:var(--ff-d);font-size:clamp(1.25rem,3vw,2.5rem);line-height:1.42;
+  font-weight:300}
+.setline a{transition:color .4s;border-bottom:1px solid transparent}
+.setline a:hover{color:var(--clay);border-bottom-color:var(--clay)}
+.setline i{font-style:normal;color:var(--paper3);margin:0 .22em}
+
+/* ══════════════════════════════════════════════ contact card */
+.cc{background:var(--paper2);border:1px solid var(--rule);
+  display:grid;grid-template-columns:1fr}
+@media(min-width:940px){.cc{grid-template-columns:.92fr 1.08fr}}
+.cc__l{padding:clamp(28px,4vw,54px);border-bottom:1px solid var(--rule)}
+@media(min-width:940px){.cc__l{border-bottom:0;border-right:1px solid var(--rule)}}
+.cc__r{padding:clamp(28px,4vw,54px)}
+.cc dl{margin:28px 0 0}
+.cc dt{font-size:.58rem;letter-spacing:.24em;text-transform:uppercase;color:var(--soft);
+  margin-top:20px}
+.cc dd{margin:5px 0 0;font-family:var(--ff-d);font-size:1.32rem}
+.frm{display:grid;gap:19px;grid-template-columns:1fr;align-content:start}
+@media(min-width:660px){.frm{grid-template-columns:1fr 1fr}.frm .full{grid-column:1/-1}}
+.fld{position:relative}
+.fld input,.fld textarea,.fld select{width:100%;background:transparent;border:0;
+  border-bottom:1px solid var(--rule);padding:15px 0 10px;outline:none;font-size:.95rem;
+  border-radius:0;transition:border-color .4s}
+.fld textarea{resize:vertical;min-height:90px}
+.fld label{position:absolute;left:0;top:15px;color:var(--soft);pointer-events:none;
+  font-size:.95rem;transform-origin:0 50%;transition:transform .45s var(--e),color .45s}
+.fld input:focus~label,.fld textarea:focus~label,.fld.filled label{
+  transform:translateY(-16px) scale(.68);color:var(--clay)}
+.fld input:focus,.fld textarea:focus,.fld select:focus{border-bottom-color:var(--clay)}
+.fld select{color:var(--soft);appearance:none;cursor:pointer}
+.sent{display:none;border:1px solid var(--clay);background:var(--paper);padding:20px 24px;
+  align-items:center;gap:14px}
+.sent.on{display:flex}
+.sent svg{width:34px;height:34px;color:var(--clay);flex:none}
+
+/* ══════════════════════════════════════════════ colophon */
+.colo{border-top:2px solid var(--ink);padding:clamp(40px,6vh,76px) var(--pad) 26px;
+  background:var(--paper2)}
+.colo__g{display:grid;grid-template-columns:1fr;gap:30px}
+@media(min-width:800px){.colo__g{grid-template-columns:1.3fr 1fr 1fr 1fr}}
+.colo h5{margin:0 0 13px;font-size:.58rem;letter-spacing:.24em;text-transform:uppercase;
+  color:var(--soft);font-weight:500}
+.colo ul{margin:0;padding:0;list-style:none}
+.colo li{margin-bottom:8px}
+.colo a{font-size:.9rem;color:var(--ink2);transition:color .35s}
+.colo a:hover{color:var(--clay)}
+.colo__bar{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;
+  border-top:1px solid var(--rule);margin-top:clamp(30px,5vh,58px);padding-top:20px;
+  font-size:.66rem;color:var(--soft)}
+.concept{position:fixed;left:12px;bottom:12px;z-index:850;font-size:.54rem;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--soft);background:var(--paper);
+  border:1px solid var(--rule);border-radius:99px;padding:6px 13px;opacity:.8;
+  pointer-events:none}
+@media(max-width:900px){
+  .mnav,.tel2{display:none}.burger{display:grid}
+  .seal b,.seal s{white-space:nowrap}
+  .mast__r .pill{padding:10px 15px;font-size:.58rem;letter-spacing:.12em;white-space:nowrap}
+  .strip{gap:4px 14px;padding:8px var(--pad)}
+}
+@media(max-width:620px){
+  .mast__r .pill{display:none}
+  .seal svg{width:34px;height:34px}
+  .seal b{font-size:1.08rem}
+  .strip span:nth-child(2),.strip span:nth-child(3){display:none}
+}
+</style>
+
+<!-- ══════════════════════════════════════════════ masthead -->
+<header class="mast" id="mast">
+  <div class="mast__in">
+    <a class="seal" href="#top">{{SVG:mark-b-seal-compact}}
+      <span><b>DTI Tile Co.</b><s>Atlanta · Georgia</s></span></a>
+    <nav class="mnav">
+      <a href="#work">The Work</a><a href="#materials">Materials</a><a href="#services">Services</a>
+      <a href="#process">Process</a><a href="#bench">The Bench</a><a href="#enquire">Enquire</a>
+    </nav>
+    <div class="mast__r">
+      <a class="tel2" href="tel:4043848819">404.384.8819</a>
+      <a class="pill pill--clay" href="#enquire"><span>Request an estimate</span></a>
+      <button class="burger" id="burger" aria-label="Menu"><i></i></button>
+    </div>
+  </div>
+</header>
+<div class="sheet" id="sheet">
+  <nav><a class="big" href="#work">The Work</a><a class="big" href="#materials">Materials</a>
+    <a class="big" href="#services">Services</a><a class="big" href="#process">Process</a>
+    <a class="big" href="#bench">The Bench</a><a class="big" href="#enquire">Enquire</a></nav>
+  <p class="meta">404.384.8819 · Atlanta Metro, Georgia</p>
+</div>
+<div class="strip">
+  <span class="meta">Tile &amp; natural stone</span>
+  <span class="meta">Est. Atlanta · Twenty-four years</span>
+  <span class="meta">Vol. 01 — Precision &amp; polish</span>
+  <span class="meta">404.384.8819</span>
+</div>
+
+<main id="top">
+<!-- ══════════════════════════════════════════════ hero -->
+<section class="hero">
+ <div class="hero__grid">
+  <div>
+    <p class="kicker" data-rv="up">Atlanta Metro · Residential tile &amp; stone</p>
+    <h1 class="d1" data-rv="up" data-delay="90">Set true,<br>grouted clean,<br><em>finished by hand.</em></h1>
+    <div class="hero__meta" data-rv="up" data-delay="200">
+      <span class="meta">Marble</span><span class="meta">Travertine</span>
+      <span class="meta">Porcelain</span><span class="meta">Mosaic</span>
+      <span class="meta">Ledger stone</span>
+    </div>
+    <p class="body" style="margin-top:24px" data-rv="up" data-delay="260">
+      DTI Tile has been setting stone in Atlanta homes for twenty-four years — bathrooms,
+      kitchens, floors, hearths and terraces. One crew, ours, from the chalk line to
+      the final bead of silicone.</p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:28px" data-rv="up" data-delay="320">
+      <a class="pill" href="#work"><span>See the work</span></a>
+      <a class="pill" href="tel:4043848819"><span>Call 404.384.8819</span></a>
+    </div>
+  </div>
+  <figure class="hero__fig" data-rv="clip">
+    <img src="{{IMG:01-marble-master-bath-1800}}" alt="Carrara marble master bathroom" data-par="0.07">
+    <figcaption class="hero__cap">Plate I — Carrara master suite, Buckhead</figcaption>
+  </figure>
+ </div>
+ <div class="hero__band">
+   <div data-rv="up"><b>24</b><small>Years in the trade</small></div>
+   <div data-rv="up" data-delay="80"><b>1,400+</b><small>Rooms completed</small></div>
+   <div data-rv="up" data-delay="160"><b>18</b><small>Metro communities</small></div>
+   <div data-rv="up" data-delay="240"><b>Own crew</b><small>Never subcontracted</small></div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ intro -->
+<section class="sec">
+ <div class="wrap">
+  <div class="numtab"><b>01</b><span>The standard</span><i></i><span>Atlanta, GA</span></div>
+  <div class="intro">
+    <aside class="marginote" data-rv="up">
+      <b>On flatness</b>
+      A finished tile plane is judged in raking light, not overhead light. We check ours with a
+      work lamp held flat against the wall before we grout — because that is how the room will
+      be seen at seven in the morning.
+    </aside>
+    <div>
+      <p class="body dropcap" style="font-size:1.14rem" data-rv="up">A tile floor is a plane. Either it is
+        true, or it is not — and no amount of grout, sealer or good intention will argue with a
+        straightedge. That single fact is the whole of our trade, and the reason we work the way
+        we do.</p>
+      <p class="body" data-rv="up" data-delay="120">Every job begins the same way. We flatten the substrate before
+        we think about the tile. We dry-lay the field so the cuts land where a person's eye will
+        forgive them. We snap lines that answer to the room rather than to a wall that was never
+        square in 1974. It is slower, and it is the only method we have ever been willing to put
+        our name against.</p>
+      <p class="body" data-rv="up" data-delay="180">What follows is a selection of recent rooms, the materials we
+        keep coming back to, and how a job with us actually runs from the first walk-through to
+        the last bead of silicone.</p>
+    </div>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ work -->
+<section class="sec" id="work" style="padding-top:0">
+ <div class="wrap">
+  <div class="numtab"><b>02</b><span>Selected work</span><i></i><span>Plates I – VIII</span></div>
+  <div class="grid">
+    <figure class="g-item g-4" data-rv="up">
+      <div class="plate ar43"><img src="{{IMG:27-calacatta-viola-range-1100}}" alt="Bookmatched Calacatta Viola range wall"></div>
+      <figcaption><h3>Bookmatched range wall</h3><span class="meta">Plate II · Buckhead</span></figcaption>
+    </figure>
+    <figure class="g-item g-2" data-rv="up" data-delay="90">
+      <div class="plate ar34"><img src="{{IMG:20-powder-room-1100}}" alt="Stacked marble powder room"></div>
+      <figcaption><h3>Powder room</h3><span class="meta">Plate III · Roswell</span></figcaption>
+    </figure>
+    <figure class="g-item g-2" data-rv="up">
+      <div class="plate ar34"><img src="{{IMG:14-cement-tile-mudroom-1100}}" alt="Encaustic cement tile mudroom"></div>
+      <figcaption><h3>Encaustic mudroom</h3><span class="meta">Plate IV · Decatur</span></figcaption>
+    </figure>
+    <figure class="g-item g-4" data-rv="up" data-delay="90">
+      <div class="plate ar43"><img src="{{IMG:07-foyer-medallion-1100}}" alt="Travertine foyer with stone medallion"></div>
+      <figcaption><h3>Medallion foyer</h3><span class="meta">Plate V · Johns Creek</span></figcaption>
+    </figure>
+    <figure class="g-item g-3" data-rv="up">
+      <div class="plate ar32"><img src="{{IMG:06-zellige-kitchen-1100}}" alt="Sage zellige kitchen backsplash"></div>
+      <figcaption><h3>Sage zellige backsplash</h3><span class="meta">Plate VI · Virginia-Highland</span></figcaption>
+    </figure>
+    <figure class="g-item g-3" data-rv="up" data-delay="90">
+      <div class="plate ar32"><img src="{{IMG:11-stone-fireplace-1100}}" alt="Stacked stone fireplace"></div>
+      <figcaption><h3>Ledger stone hearth</h3><span class="meta">Plate VII · East Cobb</span></figcaption>
+    </figure>
+    <figure class="g-item g-6" data-rv="up">
+      <div class="plate ar169"><img src="{{IMG:09-pool-deck-1800}}" alt="Travertine pool deck"></div>
+      <figcaption><h3>Travertine pool surround, laid in a French pattern</h3>
+        <span class="meta">Plate VIII · Marietta</span></figcaption>
+    </figure>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ materials -->
+<section class="sec" id="materials" style="padding-top:0">
+ <div class="wrap">
+  <div class="numtab"><b>03</b><span>Materials</span><i></i><span>A working specimen book</span></div>
+  <p class="body" style="margin:0 0 clamp(24px,4vh,44px)" data-rv="up">Each stone moves differently under a
+    blade, takes sealer differently, and wants a different joint. These are the five we keep
+    coming back to — and what we have learned about each.</p>
+  <div class="spec">
+    <figure class="swatch" data-rv="up">
+      <img src="{{IMG:21-marble-swatch-620}}" alt="Calacatta marble">
+      <span class="swatch__n">I</span>
+      <figcaption class="swatch__l"><b style="font-family:var(--ff-d);font-weight:400">Calacatta</b>
+        <span class="meta">2 mm joint</span></figcaption>
+    </figure>
+    <figure class="swatch" data-rv="up" data-delay="80">
+      <img src="{{IMG:22-travertine-swatch-620}}" alt="Honed travertine">
+      <span class="swatch__n">II</span>
+      <figcaption class="swatch__l"><b style="font-family:var(--ff-d);font-weight:400">Travertine</b>
+        <span class="meta">Filled &amp; honed</span></figcaption>
+    </figure>
+    <figure class="swatch" data-rv="up" data-delay="160">
+      <img src="{{IMG:05-hex-mosaic-620}}" alt="Marble hexagon mosaic">
+      <span class="swatch__n">III</span>
+      <figcaption class="swatch__l"><b style="font-family:var(--ff-d);font-weight:400">Hex mosaic</b>
+        <span class="meta">Warm grey grout</span></figcaption>
+    </figure>
+    <figure class="swatch" data-rv="up" data-delay="240">
+      <img src="{{IMG:17-ledger-stone-macro-620}}" alt="Split face ledger stone">
+      <span class="swatch__n">IV</span>
+      <figcaption class="swatch__l"><b style="font-family:var(--ff-d);font-weight:400">Ledger stone</b>
+        <span class="meta">Dry stacked</span></figcaption>
+    </figure>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ pull quote -->
+<section class="pq">
+  <div class="pq__fig"><img src="{{IMG:31-herringbone-macro-1100}}" alt=""></div>
+  <div class="wrap">
+    <blockquote data-rv="up">We do not leave a room we would not live in.</blockquote>
+    <cite data-rv="up" data-delay="140">The rule, unchanged since 2002</cite>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ services -->
+<section class="sec" id="services">
+ <div class="wrap">
+  <div class="numtab"><b>04</b><span>Services</span><i></i><span>Residential · Atlanta Metro</span></div>
+  <div class="toc" id="toc">
+    <div>
+      <div class="toc__row"><span class="toc__n">01</span>
+        <span class="toc__t">Bathrooms &amp; wet rooms<i></i><em>Full remodels</em></span>
+        <span class="toc__x">+</span></div>
+      <div class="toc__bd"><div>
+        <p class="body body--s" style="margin:0">Sloped and waterproofed pans, bonded membranes that we
+          flood-test in front of you, niches framed square to the tile rather than to the stud,
+          and stone that carries its veining across every plane it meets. Curbless entries,
+          linear drains, steam-rated assemblies.</p>
+        <img src="{{IMG:30-steam-shower-620}}" alt="Limestone steam shower"></div></div>
+    </div>
+    <div>
+      <div class="toc__row"><span class="toc__n">02</span>
+        <span class="toc__t">Kitchens &amp; backsplashes<i></i><em>Slab &amp; handmade</em></span>
+        <span class="toc__x">+</span></div>
+      <div class="toc__bd"><div>
+        <p class="body body--s" style="margin:0">Full-height slab backsplashes and bookmatched range
+          walls cut on site and dry-fitted before a drop of mortar. Handmade zellige and glazed
+          brick, where the whole charm is the irregularity — set so it reads as intentional.</p>
+        <img src="{{IMG:15-marble-waterfall-kitchen-620}}" alt="Marble waterfall island"></div></div>
+    </div>
+    <div>
+      <div class="toc__row"><span class="toc__n">03</span>
+        <span class="toc__t">Natural stone<i></i><em>Marble, travertine, slate</em></span>
+        <span class="toc__x">+</span></div>
+      <div class="toc__bd"><div>
+        <p class="body body--s" style="margin:0">Marble, travertine, limestone and slate — honed, sealed
+          and set by hands that know how each one moves. Medallion inlay, decorative borders and
+          diamond-set fields, cut on a wet saw and eased by hand.</p>
+        <img src="{{IMG:13-travertine-floor-620}}" alt="Travertine floor with diamond border"></div></div>
+    </div>
+    <div>
+      <div class="toc__row"><span class="toc__n">04</span>
+        <span class="toc__t">Floors &amp; large format<i></i><em>Up to 5 ft</em></span>
+        <span class="toc__x">+</span></div>
+      <div class="toc__bd"><div>
+        <p class="body body--s" style="margin:0">Self-levelled substrates, uncoupling membranes and
+          heated floor systems under large-format porcelain — flat planes with joints you have to
+          look for. Lippage held inside a millimetre across the whole field.</p>
+        <img src="{{IMG:23-greatroom-lfp-620}}" alt="Large format porcelain floor"></div></div>
+    </div>
+    <div>
+      <div class="toc__row"><span class="toc__n">05</span>
+        <span class="toc__t">Hearths &amp; feature walls<i></i><em>Dry-stacked</em></span>
+        <span class="toc__x">+</span></div>
+      <div class="toc__bd"><div>
+        <p class="body body--s" style="margin:0">Dry-stacked ledger panels, full-height surrounds and
+          stacked stone bars — mechanically supported, mitred at the returns, with no raw
+          edge left showing anywhere a hand can reach.</p>
+        <img src="{{IMG:02-stone-wetbar-620}}" alt="Stacked stone wet bar"></div></div>
+    </div>
+    <div>
+      <div class="toc__row"><span class="toc__n">06</span>
+        <span class="toc__t">Outdoor &amp; pool decks<i></i><em>Freeze-rated</em></span>
+        <span class="toc__x">+</span></div>
+      <div class="toc__bd"><div>
+        <p class="body body--s" style="margin:0">Travertine pavers, bluestone terraces, coping and pool
+          surrounds set on proper exterior systems — built to take a Georgia August and a
+          January freeze without letting go.</p>
+        <img src="{{IMG:32-outdoor-living-620}}" alt="Covered outdoor living with stone fireplace"></div></div>
+    </div>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ process -->
+<section class="sec" id="process" style="padding-top:0">
+ <div class="wrap">
+  <div class="numtab"><b>05</b><span>How a job runs</span><i></i><span>Four stages</span></div>
+  <div class="proc">
+    <article class="pcard" data-rv="up"><b>01</b><h3>Walk &amp; measure</h3>
+      <p class="body body--s">We come to the house, look at the substrate and tell you plainly what
+        it needs. Written, itemised estimate inside two days.</p></article>
+    <article class="pcard" data-rv="up" data-delay="90"><b>02</b><h3>Layout &amp; dry fit</h3>
+      <p class="body body--s">Substrate flattened, waterproofing applied and flood-tested, the field
+        snapped and dry-laid so you can see every cut before it is permanent.</p></article>
+    <article class="pcard" data-rv="up" data-delay="180"><b>03</b><h3>Set</h3>
+      <p class="body body--s">Back-buttered, levelled, clipped. The same crew on day one and day
+        eleven. Site swept and water shut off every evening.</p></article>
+    <article class="pcard" data-rv="up" data-delay="270"><b>04</b><h3>Grout &amp; hand over</h3>
+      <p class="body body--s">Joints packed and struck clean, stone sealed, silicone at every change
+        of plane — then we walk it with you under a work light.</p></article>
+  </div>
+  <figure style="margin-top:clamp(28px,4.6vh,56px)" data-rv="clip">
+    <div class="plate ar169"><img src="{{IMG:36-floor-in-progress-1800}}" alt="Marble floor part-set, combed mortar and laser line"></div>
+    <figcaption class="meta" style="padding-top:11px;margin-top:11px;border-top:1px solid var(--rule)">
+      Stage 03 — a large-format marble floor part-set to a laser line, Sandy Springs</figcaption>
+  </figure>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ bench -->
+<section class="sec" id="bench" style="padding-top:0">
+ <div class="wrap">
+  <div class="numtab"><b>06</b><span>The bench</span><i></i><span>Who does the work</span></div>
+  <div class="maker">
+    <figure class="maker__fig" data-rv="clip">
+      <img src="{{IMG:35-finished-wall-level-1100}}" alt="Freshly grouted marble wall checked with a level" data-par="0.06"></figure>
+    <div>
+      <h2 class="d2" data-rv="up">Twenty-four years,<br><span class="it">one trade.</span></h2>
+      <p class="body" style="margin-top:26px" data-rv="up" data-delay="100">
+        DTI began with one van, one apprentice and a rule that has not changed since: we do not
+        leave a room we would not live in. No subcontracted crews, no rotating faces, and nobody
+        disappearing for a fortnight onto somebody else's job halfway through yours.</p>
+      <p class="body" style="margin-top:16px" data-rv="up" data-delay="170">
+        Most of our work now arrives from designers and builders who send us the rooms they cannot
+        afford to have go wrong — and from homeowners who had us once and will not now call
+        anybody else.</p>
+      <p class="sig" data-rv="up" data-delay="240">Precision and polish, detail and such.</p>
+    </div>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ voices -->
+<section class="sec" style="padding-top:0">
+ <div class="wrap">
+  <div class="numtab"><b>07</b><span>In their words</span><i></i><span>Recent clients</span></div>
+  <div class="voices">
+    <blockquote class="vc" data-rv="up"><p>They rebuilt a shower two other outfits had already failed
+      at, and flood tested it in front of me. Four years on, not a hairline anywhere.</p>
+      <cite><b>Homeowner</b>Sandy Springs · Master bath</cite></blockquote>
+    <blockquote class="vc" data-rv="up" data-delay="100"><p>I specify a lot of stone. DTI are the only
+      setters I will hand a bookmatched slab to without holding my breath.</p>
+      <cite><b>Interior designer</b>Buckhead · Kitchen &amp; bar</cite></blockquote>
+    <blockquote class="vc" data-rv="up" data-delay="200"><p>Eleven days quoted, eleven days done. They
+      swept the site every single evening. That simply never happens.</p>
+      <cite><b>Homeowner</b>Marietta · Hall bath</cite></blockquote>
+  </div>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ areas -->
+<section class="sec" style="padding-top:0">
+ <div class="wrap">
+  <div class="numtab"><b>08</b><span>Where we work</span><i></i><span>Atlanta Metro</span></div>
+  <p class="setline" data-rv="up">
+    <a href="#enquire">Buckhead</a><i>·</i><a href="#enquire">Sandy Springs</a><i>·</i>
+    <a href="#enquire">Marietta</a><i>·</i><a href="#enquire">Roswell</a><i>·</i>
+    <a href="#enquire">Alpharetta</a><i>·</i><a href="#enquire">Dunwoody</a><i>·</i>
+    <a href="#enquire">Decatur</a><i>·</i><a href="#enquire">Brookhaven</a><i>·</i>
+    <a href="#enquire">Smyrna</a><i>·</i><a href="#enquire">Johns Creek</a><i>·</i>
+    <a href="#enquire">East Cobb</a><i>·</i><a href="#enquire">Vinings</a><i>·</i>
+    <a href="#enquire">Chamblee</a><i>·</i><a href="#enquire">Tucker</a>
+    <span style="color:var(--soft)"> — and anywhere else inside about forty minutes of the
+    perimeter. If your town is not on the list, call anyway.</span>
+  </p>
+ </div>
+</section>
+
+<!-- ══════════════════════════════════════════════ enquire -->
+<section class="sec" id="enquire" style="padding-top:0">
+ <div class="wrap">
+  <div class="numtab"><b>09</b><span>Enquire</span><i></i><span>One business day</span></div>
+  <div class="cc" data-rv="up">
+    <div class="cc__l">
+      <h2 class="d3">Tell us about the room.</h2>
+      <p class="body body--s" style="margin-top:16px">Send the space, the stone you have in mind and
+        roughly when you would like it done. We answer every enquiry within one business day —
+        or simply call; we generally pick up.</p>
+      <dl>
+        <dt>Telephone</dt><dd><a href="tel:4043848819">404.384.8819</a></dd>
+        <dt>Service area</dt><dd>Atlanta Metro, Georgia</dd>
+        <dt>Hours</dt><dd>Monday – Saturday · 7am – 6pm</dd>
+      </dl>
+    </div>
+    <div class="cc__r">
+      <form class="frm" id="form" novalidate>
+        <div class="fld"><input id="g1" required><label for="g1">Your name</label></div>
+        <div class="fld"><input id="g2" type="tel" required><label for="g2">Phone</label></div>
+        <div class="fld full"><input id="g3" type="email" required><label for="g3">Email</label></div>
+        <div class="fld full"><select id="g4">
+          <option>What are you tiling?</option><option>Bathroom / wet room</option>
+          <option>Kitchen / backsplash</option><option>Flooring</option>
+          <option>Hearth / feature wall</option><option>Outdoor / pool deck</option>
+          <option>Repair or regrout</option><option>Something else</option></select></div>
+        <div class="fld full"><textarea id="g5" rows="3"></textarea>
+          <label for="g5">The room, the stone, the timing</label></div>
+        <div class="full"><button class="pill pill--clay" type="submit" style="width:100%;
+          justify-content:center;padding:16px"><span>Send enquiry</span></button></div>
+        <div class="sent full" id="sent">{{SVG:mark-b-seal-compact}}
+          <div><b style="font-family:var(--ff-d);font-size:1.16rem;display:block">Thank you — that is with us.</b>
+          <span class="meta">Reply within one business day · demo form, nothing was sent</span></div></div>
+      </form>
+    </div>
+  </div>
+ </div>
+</section>
+</main>
+
+<!-- ══════════════════════════════════════════════ colophon -->
+<footer class="colo">
+  <div class="wrap colo__g">
+    <div>
+      <a class="seal" href="#top">{{SVG:mark-b-seal}}
+        <span><b>DTI Tile Co.</b><s>Atlanta · Georgia</s></span></a>
+      <p class="body body--s" style="margin-top:18px;max-width:32ch">Tile and natural stone
+        installation for Atlanta homes. Twenty-four years, one trade.</p>
+    </div>
+    <div><h5>Services</h5><ul>
+      <li><a href="#services">Bathrooms &amp; wet rooms</a></li>
+      <li><a href="#services">Kitchens &amp; backsplashes</a></li>
+      <li><a href="#services">Natural stone</a></li>
+      <li><a href="#services">Floors &amp; large format</a></li>
+      <li><a href="#services">Outdoor &amp; pool decks</a></li></ul></div>
+    <div><h5>The journal</h5><ul>
+      <li><a href="#work">Selected work</a></li><li><a href="#materials">Materials</a></li>
+      <li><a href="#process">Process</a></li><li><a href="#bench">The bench</a></li></ul></div>
+    <div><h5>Reach us</h5><ul>
+      <li><a href="tel:4043848819">404.384.8819</a></li>
+      <li><a href="#enquire">Request an estimate</a></li>
+      <li>Mon – Sat · 7am – 6pm</li><li>Atlanta Metro, Georgia</li></ul></div>
+  </div>
+  <div class="wrap colo__bar">
+    <span>© 2026 DTITile — All rights reserved.</span>
+    <span>Set in Fraunces &amp; Inter · Vol. 01</span>
+  </div>
+</footer>
+<div class="concept">Concept B · Journal</div>
+
+<script>
+(function(){
+"use strict";
+var $=function(s,c){return (c||document).querySelector(s)},
+    $$=function(s,c){return Array.prototype.slice.call((c||document).querySelectorAll(s))};
+
+/* reveal */
+var io=new IntersectionObserver(function(es){es.forEach(function(e){
+  if(!e.isIntersecting)return;var el=e.target;
+  setTimeout(function(){el.classList.add("in")},+(el.dataset.delay||0));io.unobserve(el);
+})},{threshold:.12,rootMargin:"0px 0px -6% 0px"});
+$$("[data-rv],.pcard").forEach(function(el){io.observe(el)});
+
+/* masthead shadow */
+var mast=$("#mast");
+addEventListener("scroll",function(){mast.classList.toggle("stuck",scrollY>8)},{passive:true});
+
+/* menu */
+$("#burger").addEventListener("click",function(){document.body.classList.toggle("menu")});
+$$("#sheet a").forEach(function(a){a.addEventListener("click",function(){
+  document.body.classList.remove("menu")})});
+
+/* parallax */
+var pars=$$("[data-par]");
+function par(){var vh=innerHeight;pars.forEach(function(el){
+  var r=el.parentElement.getBoundingClientRect();
+  if(r.bottom<-160||r.top>vh+160)return;
+  var mid=r.top+r.height/2-vh/2;
+  el.style.transform="translate3d(0,"+(-mid*+el.dataset.par).toFixed(2)+"px,0)";
+})}
+addEventListener("scroll",par,{passive:true});addEventListener("resize",par);par();
+
+/* toc accordion */
+var rows=$$("#toc .toc__row");
+rows.forEach(function(r){
+  var bd=r.nextElementSibling;
+  r.addEventListener("click",function(){
+    var open=r.classList.contains("open");
+    rows.forEach(function(o){o.classList.remove("open");o.nextElementSibling.style.height="0px"});
+    if(!open){r.classList.add("open");bd.style.height=bd.firstElementChild.offsetHeight+"px"}
+  });
+});
+if(rows[0]){rows[0].classList.add("open");
+  rows[0].nextElementSibling.style.height=rows[0].nextElementSibling.firstElementChild.offsetHeight+"px"}
+addEventListener("resize",function(){var o=$("#toc .toc__row.open");
+  if(o)o.nextElementSibling.style.height=o.nextElementSibling.firstElementChild.offsetHeight+"px"});
+
+/* counters in the hero band */
+$$(".hero__band b").forEach(function(el){
+  var raw=el.textContent.trim(), m=raw.match(/^([\d,]+)(\+?)$/);
+  if(!m)return;
+  var to=+m[1].replace(/,/g,""), sfx=m[2], done=false;
+  el.textContent="0"+sfx;
+  var ob=new IntersectionObserver(function(es){
+    if(!es[0].isIntersecting||done)return;done=true;ob.disconnect();
+    var t0=performance.now();
+    (function run(n){var k=Math.min((n-t0)/1500,1),e=1-Math.pow(1-k,3);
+      el.textContent=Math.round(to*e).toLocaleString("en-US")+sfx;
+      if(k<1)requestAnimationFrame(run)})(t0);
+  },{threshold:.6});
+  ob.observe(el);
+});
+
+/* form */
+$$(".fld input,.fld textarea").forEach(function(el){
+  var s=function(){el.parentElement.classList.toggle("filled",!!el.value)};
+  el.addEventListener("input",s);el.addEventListener("blur",s)});
+$("#form").addEventListener("submit",function(e){e.preventDefault();
+  $("#sent").classList.add("on");
+  e.target.querySelector('button[type="submit"]').style.display="none"});
+})();
+</script>
