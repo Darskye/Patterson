@@ -2,61 +2,89 @@
 <html lang="en" data-theme="phosphor">
 <head>
 <meta charset="utf-8">
-<title>VAN OPS · CAMERA WALL</title>
+<title>VAN OPS · CAMERA</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../vendor/augmented-ui.min.css">
 <link rel="stylesheet" href="../assets/core.css">
 <style>
-  .cam-stage { grid-template-columns: minmax(0,1fr) 252px; }
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 8px; min-height: 0; }
-  .tile {
-    position: relative; overflow: hidden; cursor: pointer; background: #010304;
-    border: 1px solid var(--line); min-height: 0;
-    transition: border-color .18s;
-  }
-  .tile:hover { border-color: var(--line-hard); }
-  .tile.sel { border-color: var(--hi); box-shadow: 0 0 0 1px var(--hi), 0 0 22px rgba(92,255,177,.16); }
-  .tile canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  .grid.zoom .tile { display: none; }
-  .grid.zoom .tile.sel { display: block; grid-area: 1 / 1 / 4 / 4; }
+  .cam-stage { grid-template-columns: minmax(0,1fr) 244px; }
 
-  /* on-screen display baked over the feed */
-  .osd { position: absolute; inset: 0; pointer-events: none; font-size: 10px; letter-spacing: .12em; }
-  .osd .tl { position: absolute; top: 6px; left: 8px; color: #cfe9df; text-shadow: 0 1px 3px #000; }
-  .osd .tr { position: absolute; top: 6px; right: 8px; color: #cfe9df; text-shadow: 0 1px 3px #000; display: flex; align-items: center; gap: 6px; }
-  .osd .bl { position: absolute; bottom: 6px; left: 8px; color: #9fb8b0; text-shadow: 0 1px 3px #000; font-size: 9.5px; }
-  .osd .br { position: absolute; bottom: 6px; right: 8px; color: #9fb8b0; text-shadow: 0 1px 3px #000; font-size: 9.5px; font-variant-numeric: tabular-nums; }
+  /* ---- the single feed ---- */
+  .feedwrap { position: relative; height: 100%; background: #000; overflow: hidden; cursor: crosshair; }
+  .feedwrap.panning { cursor: grabbing; }
+  .feedwrap canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  .osd { position: absolute; inset: 0; pointer-events: none; font-size: 12px; letter-spacing: .12em; z-index: 3; }
+  .osd .tl { position: absolute; top: 10px; left: 14px; color: #d8f2e8; text-shadow: 0 1px 4px #000; }
+  .osd .tl b { font-weight: 700; letter-spacing: .2em; }
+  .osd .tl span { color: #9fb8b0; }
+  .osd .tr { position: absolute; top: 10px; right: 14px; display: flex; align-items: center; gap: 10px; color: #d8f2e8; text-shadow: 0 1px 4px #000; }
+  .osd .bl { position: absolute; bottom: 10px; left: 14px; color: #9fb8b0; text-shadow: 0 1px 4px #000; font-size: 11px; }
+  .osd .br { position: absolute; bottom: 10px; right: 14px; color: #cfe9df; text-shadow: 0 1px 4px #000;
+             font-size: 13px; font-variant-numeric: tabular-nums; letter-spacing: .08em; }
   .osd .rec { color: #ff4d4d; font-weight: 700; }
-  .osd .rec i { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #ff4d4d; margin-right: 4px; vertical-align: -1px; animation: recBlink 1.4s steps(2) infinite; }
-  @keyframes recBlink { 50% { opacity: .15; } }
-  .osd .bars { display: inline-flex; gap: 1.5px; align-items: flex-end; height: 9px; }
-  .osd .bars i { width: 2.5px; background: #cfe9df; opacity: .35; }
-  .osd .bars i.on { opacity: 1; }
-  .tile .cross { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; transform: translate(-50%,-50%); opacity: .22; }
-  .tile .cross::before, .tile .cross::after { content: ''; position: absolute; background: #cfe9df; }
-  .tile .cross::before { left: 50%; top: 0; width: 1px; height: 100%; }
-  .tile .cross::after { top: 50%; left: 0; height: 1px; width: 100%; }
+  .osd .rec i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ff4d4d;
+                margin-right: 5px; vertical-align: -1px; animation: recBlink 1.4s steps(2) infinite; }
+  @keyframes recBlink { 50% { opacity: .12; } }
+  .osd .zoomtag { color: var(--warn); }
 
-  .badge-loop {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
-    padding: 5px 14px; font-size: 10px; letter-spacing: .3em; color: #04070a; background: var(--warn);
-    box-shadow: 0 0 30px rgba(255,180,84,.5); animation: recBlink 1.6s steps(2) infinite; display: none;
+  /* zoom reticle corners, only while zoomed */
+  .zoombox { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .2s; z-index: 2; }
+  .zoombox.on { opacity: 1; }
+  .zoombox i { position: absolute; width: 22px; height: 22px; border: 1px solid rgba(255,180,84,.7); }
+  .zoombox i:nth-child(1) { top: 18px; left: 22px; border-right: 0; border-bottom: 0; }
+  .zoombox i:nth-child(2) { top: 18px; right: 22px; border-left: 0; border-bottom: 0; }
+  .zoombox i:nth-child(3) { bottom: 18px; left: 22px; border-right: 0; border-top: 0; }
+  .zoombox i:nth-child(4) { bottom: 18px; right: 22px; border-left: 0; border-top: 0; }
+
+  .badge {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 4;
+    padding: 7px 18px; font-size: 12px; letter-spacing: .32em; color: #04070a; background: var(--warn);
+    box-shadow: 0 0 40px rgba(255,180,84,.5); animation: recBlink 1.6s steps(2) infinite; display: none;
   }
-  .tile[data-mode="LOOP"] .badge-loop { display: block; }
-  .tile[data-mode="LOOP"] { border-color: var(--warn); }
-  .tile[data-mode="DOWN"] { border-color: var(--alarm); }
+  .feedwrap[data-mode="LOOP"] .badge { display: block; }
 
-  /* right rail */
-  .chan { display: grid; grid-template-columns: 16px 1fr auto; gap: 8px; align-items: center;
-          padding: 4px 6px; font-size: 10.5px; cursor: pointer; border-bottom: 1px dotted var(--line); }
-  .chan:hover { background: rgba(92,255,177,.07); }
-  .chan.sel { background: rgba(92,255,177,.12); color: var(--hi); }
+  /* channel change wipe */
+  .wipe { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 0; background: #cfe9df; }
+  .wipe.go { animation: wipeFlash .22s steps(3); }
+  @keyframes wipeFlash { 0% { opacity: .55 } 60% { opacity: .08 } 100% { opacity: 0 } }
+
+  /* drop target / empty state */
+  .dropzone {
+    position: absolute; inset: 0; z-index: 6; display: none; place-items: center;
+    background: rgba(2,5,7,.86); backdrop-filter: blur(2px); text-align: center; padding: 30px;
+  }
+  .dropzone.on { display: grid; }
+  .dropzone h3 { margin: 0 0 6px; color: var(--hi); letter-spacing: .3em; font-size: 14px; text-shadow: var(--glow); }
+  .dropzone p { margin: 0 0 16px; color: var(--dim); font-size: 11.5px; line-height: 1.7; max-width: 60ch; }
+  .dropzone code { color: var(--warn); }
+  .feedwrap.dragover .dropzone { display: grid; outline: 2px dashed var(--hi); outline-offset: -14px; }
+
+  .hintbar {
+    position: absolute; bottom: 0; left: 0; right: 0; z-index: 4;
+    transition: opacity .5s; opacity: 1;
+    padding: 6px 14px; font-size: 10px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--dim); background: linear-gradient(transparent, rgba(2,5,7,.9));
+    display: flex; gap: 18px; align-items: center;
+  }
+  .hintbar b { color: var(--hi); }
+  .hintbar.gone { opacity: 0; pointer-events: none; }
+  .feedwrap:hover .hintbar { opacity: 1; }
+
+  /* ---- rail ---- */
+  .chan { display: grid; grid-template-columns: 15px 1fr auto; gap: 8px; align-items: center;
+          padding: 5px 6px; font-size: 10.5px; cursor: pointer; border-bottom: 1px dotted var(--line); }
+  .chan:hover { background: rgba(92,255,177,.08); }
+  .chan.sel { background: rgba(92,255,177,.15); color: var(--hi); }
   .chan .k { color: var(--dim); font-size: 9.5px; }
+  .chan .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chan .src { display: block; font-size: 8.5px; letter-spacing: .1em; color: var(--dim);
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .chan .st { font-size: 9px; letter-spacing: .16em; }
-  .chan .st.LIVE { color: var(--ok); } .chan .st.LOOP { color: var(--warn); } .chan .st.DOWN { color: var(--alarm); }
-  .buf { display: flex; gap: 1.5px; height: 26px; align-items: flex-end; margin-top: 6px; }
-  .buf i { flex: 1; background: var(--line-hard); }
+  .chan .st.LIVE { color: var(--ok); } .chan .st.LOOP { color: var(--warn); } .chan .st.NOSIG { color: var(--alarm); }
+  .fxrow { display: flex; gap: 4px; }
+  .fxrow .btn { flex: 1; padding: 4px 0; text-align: center; }
 </style>
 </head>
 <body>
@@ -65,11 +93,11 @@
   <header class="topbar" data-augmented-ui="tl-clip br-clip border">
     <span class="brand">ARGUS<small> /NVR-16</small></span>
     <span class="sep"></span>
-    <span class="label">HOST</span><span class="val" id="host">10.42.9.10</span>
+    <span class="label">CHANNEL</span><span class="hi" id="hdr-ch">CAM-01</span>
     <span class="sep"></span>
-    <span class="label">SESSION</span><span class="val">admin · 0x<span id="sess">—</span></span>
+    <span class="label">SOURCE</span><span class="val" id="hdr-src">no footage loaded</span>
     <span class="sep"></span>
-    <span class="label">CHANNELS</span><span class="hi"><span id="nlive">9</span>/9 LIVE</span>
+    <span class="label">ZOOM</span><span class="warn tabular" id="hdr-zoom">1.00x</span>
     <span class="spacer"></span>
     <div class="phasestrip" data-auto></div>
     <span class="sep"></span>
@@ -77,38 +105,84 @@
   </header>
 
   <main class="stage cam-stage">
-    <div class="grid" id="grid"></div>
+
+    <section class="panel" data-augmented-ui="tl-clip br-clip border">
+      <h2 class="panel-title">LIVE FEED
+        <span class="t-right"><span id="chpos">1</span> / <span id="chtot">9</span></span></h2>
+      <div class="panel-body flush">
+        <div class="feedwrap" id="feed">
+          <canvas id="cv"></canvas>
+
+          <div class="zoombox" id="zoombox"><i></i><i></i><i></i><i></i></div>
+
+          <div class="osd">
+            <div class="tl"><b id="o-id">CAM-01</b> &nbsp;<span id="o-name">FRONT GATE</span></div>
+            <div class="tr"><span class="zoomtag" id="o-zoom"></span><span class="rec"><i></i>REC</span></div>
+            <div class="bl" id="o-meta">10.42.9.11 · EXT · 2.8MM</div>
+            <div class="br" id="o-ts">—</div>
+          </div>
+
+          <div class="badge">● LOOP INJECTED</div>
+          <div class="wipe" id="wipe"></div>
+
+          <div class="hintbar" id="hintbar">
+            <span><b>SCROLL</b> zoom</span>
+            <span><b>SCROLL SIDEWAYS</b> or <b>SHIFT+SCROLL</b> next camera</span>
+            <span><b>DRAG</b> pan</span>
+            <span><b>DBL-CLICK</b> reset</span>
+          </div>
+
+          <div class="dropzone" id="dropzone">
+            <div>
+              <h3>DROP YOUR FOOTAGE HERE</h3>
+              <p>Drag the video files straight onto this window, or hit <b>LOAD FOOTAGE</b> on the right
+                 and point it at your folder. Nothing gets renamed or copied.<br><br>
+                 To have it load itself every time, put the clips in
+                 <code>vanops/media/</code> and run <code>make-manifest</code> once.</p>
+              <button class="btn" id="dz-btn" data-augmented-ui="tl-clip br-clip border">LOAD FOOTAGE</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <aside class="panel" data-augmented-ui="tl-clip br-clip border">
-      <h2 class="panel-title">CHANNELS <span class="t-right">16CH</span></h2>
+      <h2 class="panel-title">CHANNELS <span class="t-right" id="rail-count">—</span></h2>
       <div class="panel-body" style="padding:6px 8px">
         <div id="chans"></div>
 
-        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">LOOP INJECTION</h2>
-        <p class="dim" style="font-size:10px;line-height:1.55;margin:0 0 8px">
-          Substitutes a 40 s clean plate on the selected channel. Head-end keeps logging
-          continuous video. Guard sees nothing.
+        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">FOOTAGE</h2>
+        <div class="btn-row" style="margin-bottom:6px">
+          <button class="btn" id="b-load" data-augmented-ui="tl-clip br-clip border">LOAD FOOTAGE</button>
+          <button class="btn" id="b-clear" data-augmented-ui="tl-clip br-clip border">CLEAR</button>
+        </div>
+        <input type="file" id="filepick" accept="video/*" multiple webkitdirectory directory hidden>
+        <input type="file" id="filepick2" accept="video/*" multiple hidden>
+        <p class="dim" style="font-size:10px;line-height:1.55;margin:0 0 4px">
+          Picks a whole folder. <a href="#" id="pickfiles" style="color:var(--hi)">Pick single files instead</a>.
         </p>
+        <div class="readout">
+          <dt>Clips</dt><dd id="ro-clips">0</dd>
+          <dt>Playing</dt><dd id="ro-play">—</dd>
+          <dt>Res</dt><dd id="ro-res">—</dd>
+        </div>
+
+        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">LOOK</h2>
+        <div class="fxrow">
+          <button class="btn" data-fx="0" data-augmented-ui="tl-clip br-clip border">OFF</button>
+          <button class="btn" data-fx="1" data-augmented-ui="tl-clip br-clip border">LIGHT</button>
+          <button class="btn active" data-fx="2" data-augmented-ui="tl-clip br-clip border">FULL</button>
+          <button class="btn" data-fx="3" data-augmented-ui="tl-clip br-clip border">HEAVY</button>
+        </div>
+        <p class="dim" style="font-size:10px;line-height:1.55;margin:6px 0 0">
+          Grade, sensor grain, scanlines, chroma split, dropped frames and block tearing,
+          drawn over your footage. <b class="hi">[E]</b> cycles it.
+        </p>
+
+        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">LOOP INJECTION</h2>
         <div class="btn-row">
           <button class="btn" id="b-loop" data-augmented-ui="tl-clip br-clip border">INJECT [L]</button>
           <button class="btn danger" id="b-live" data-augmented-ui="tl-clip br-clip border">RESTORE [K]</button>
-        </div>
-
-        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">PLATE BUFFER</h2>
-        <div class="readout">
-          <dt>Captured</dt><dd id="ro-cap">00:40</dd>
-          <dt>Bitrate</dt><dd id="ro-br">—</dd>
-          <dt>Encoder</dt><dd>H.264 · CBR</dd>
-          <dt>Drift</dt><dd id="ro-drift">—</dd>
-        </div>
-        <div class="buf" id="buf"></div>
-
-        <h2 class="panel-title" style="margin:14px -8px 6px;padding-left:8px">HEAD-END</h2>
-        <div class="readout">
-          <dt>Firmware</dt><dd>4.1.2-argus</dd>
-          <dt>Retention</dt><dd>31 d</dd>
-          <dt>Disk</dt><dd id="ro-disk">—</dd>
-          <dt>Op. temp</dt><dd id="ro-temp">—</dd>
         </div>
       </div>
     </aside>
@@ -116,11 +190,11 @@
 
   <footer class="statusbar">
     <span>NVR <b class="ok">AUTHENTICATED</b></span>
-    <span>SELECTED <b id="s-sel">CAM-01</b></span>
+    <span>CH <b id="s-sel">CAM-01</b></span>
+    <span>ZOOM <b class="tabular" id="s-zoom">1.00x</b></span>
     <span>LOOPED <b id="s-loop" class="warn">0</b></span>
-    <span>PLATE <b id="s-plate">READY</b></span>
     <span class="spacer"></span>
-    <span class="dim">[Q..O] LOOP CHANNEL · [L] LOOP ALL · [K] RESTORE · [ENTER] ZOOM · [?] KEYS</span>
+    <span class="dim">[←/→] CAMERA · [Q..O] JUMP · [+/-] ZOOM · [0] RESET · [P] PAUSE · [E] LOOK · [L/K] LOOP · [?] KEYS</span>
   </footer>
 </div>
 
@@ -132,30 +206,31 @@
   const { CAMERAS, FICTION } = VANDATA;
   const KEYS = ['q','w','e','r','t','y','u','i','o'];
   VAN.helpExtra = [
-    ['Q W E R T Y U I O', 'Loop-inject channels 1 through 9'],
-    ['L / K', 'Loop every channel / restore every channel'],
-    ['Enter', 'Zoom the selected channel to full frame'],
-    ['Click a feed', 'Select it · click again to zoom']
+    ['Scroll', 'Zoom into the footage, centred on the pointer'],
+    ['Scroll sideways', 'Next / previous camera (Shift+scroll on a mouse)'],
+    ['Drag', 'Pan around while zoomed in'],
+    ['Double-click', 'Snap back to 1.00x'],
+    ['Q W E R T Y U I O', 'Jump straight to a channel'],
+    ['E', 'Cycle the look: off / light / full / heavy'],
+    ['P', 'Freeze the clip on a frame'],
+    ['L / K', 'Loop-inject this channel / restore it']
   ];
   VAN.init({ name: 'CAMERAS', code: 'C-01' });
-  VAN.$('#sess').textContent = VAN.hex(8);
 
-  /* ---------- pre-rendered sensor noise (blitted, never per-pixel per frame) ---------- */
+  /* ===================== pre-rendered sensor noise ===================== */
   const NOISE = [];
   for (let n = 0; n < 6; n++) {
-    const c = document.createElement('canvas'); c.width = 160; c.height = 90;
-    const x = c.getContext('2d'), img = x.createImageData(160, 90), R = VAN.rng(1000 + n);
+    const c = document.createElement('canvas'); c.width = 200; c.height = 112;
+    const x = c.getContext('2d'), img = x.createImageData(200, 112), R = VAN.rng(1000 + n);
     for (let i = 0; i < img.data.length; i += 4) {
       const v = 90 + R() * 165;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
-      img.data[i + 3] = 255;
+      img.data[i] = img.data[i + 1] = img.data[i + 2] = v; img.data[i + 3] = 255;
     }
     x.putImageData(img, 0, 0);
     NOISE.push(c);
   }
 
-  /* ---------- scene definitions ---------- */
-  // props: [x, y, w, h, kind]  in normalised feed space (0..1)
+  /* ---------- fallback plate: the drawn scene, used when a channel has no clip ---------- */
   const SCENES = {
     gate:     { ir: true,  hz: .52, tone: [26, 40, 36], props: [[.05,.28,.10,.44,'post'],[.85,.28,.10,.44,'post'],[.15,.40,.70,.30,'gate'],[.30,.16,.40,.10,'arch'],[.00,.70,1,.30,'road']], walk: [[-.1,.80],[1.1,.80]], lamp: [.5,.13] },
     drive:    { ir: true,  hz: .46, tone: [24, 38, 34], props: [[.00,.55,.28,.45,'hedge'],[.72,.55,.28,.45,'hedge'],[.30,.46,.40,.54,'road'],[.38,.30,.24,.16,'house']], walk: [[.5,.52],[.42,1.05]], lamp: [.2,.30] },
@@ -168,283 +243,569 @@
     lawn:     { ir: true,  hz: .50, tone: [24, 38, 32], props: [[.00,.50,1,.16,'hedge'],[.10,.32,.20,.20,'tree'],[.70,.30,.22,.22,'tree'],[.00,.66,1,.34,'grass']], walk: [[1.1,.86],[-.1,.80]], lamp: [.86,.24] }
   };
 
-  /* ---------- feed renderer ---------- */
-  function makeFeed(canvas, cam, idx) {
-    const S = SCENES[cam.scene];
-    const R = VAN.rng(cam.id);
-    const fit = VAN.fit(canvas);
-    let glitchUntil = 0, frozenAt = 0, lastMode = 'LIVE';
-    const walkPhase = R() * 10, walkSpeed = 0.055 + R() * 0.035;
-    const shakeSeed = R() * 100;
+  function paintScene(g, w, h, t, sceneName) {
+    const S = SCENES[sceneName] || SCENES.corridor;
+    const R = Math.random;
+    const [r0, g0, b0] = S.tone;
+    // sky / far wall gradient
+    const grad = g.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgb(' + (r0 - 6) + ',' + (g0 - 6) + ',' + (b0 - 6) + ')');
+    grad.addColorStop(S.hz, 'rgb(' + (r0 + 8) + ',' + (g0 + 10) + ',' + (b0 + 9) + ')');
+    grad.addColorStop(1, 'rgb(' + (r0 - 8) + ',' + (g0 - 6) + ',' + (b0 - 6) + ')');
+    g.fillStyle = grad; g.fillRect(0, 0, w, h);
 
-    function paintScene(g, w, h, t) {
-      const [r0, g0, b0] = S.tone;
-      // sky / far wall gradient
-      const grad = g.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, 'rgb(' + (r0 - 6) + ',' + (g0 - 6) + ',' + (b0 - 6) + ')');
-      grad.addColorStop(S.hz, 'rgb(' + (r0 + 8) + ',' + (g0 + 10) + ',' + (b0 + 9) + ')');
-      grad.addColorStop(1, 'rgb(' + (r0 - 8) + ',' + (g0 - 6) + ',' + (b0 - 6) + ')');
-      g.fillStyle = grad; g.fillRect(0, 0, w, h);
+    // one-point perspective floor
+    const hz = h * S.hz, vx = w * 0.5;
+    g.strokeStyle = 'rgba(200,235,222,.13)'; g.lineWidth = 1;
+    for (let i = -6; i <= 6; i++) {
+      g.beginPath(); g.moveTo(vx + i * w * 0.055, hz); g.lineTo(vx + i * w * 0.42, h); g.stroke();
+    }
+    for (let i = 1; i < 9; i++) {
+      const y = hz + (h - hz) * Math.pow(i / 9, 2.1);
+      g.globalAlpha = 1 - i / 11;
+      g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+    }
+    g.globalAlpha = 1;
+    // wall / floor junction reads the depth instantly on camera
+    g.strokeStyle = 'rgba(210,245,232,.30)'; g.lineWidth = 1.4;
+    g.beginPath(); g.moveTo(0, hz); g.lineTo(w, hz); g.stroke();
+    // ceiling falls off
+    const cg = g.createLinearGradient(0, 0, 0, hz);
+    cg.addColorStop(0, 'rgba(0,0,0,.42)'); cg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = cg; g.fillRect(0, 0, w, hz);
 
-      // one-point perspective floor
-      const hz = h * S.hz, vx = w * 0.5;
-      g.strokeStyle = 'rgba(200,235,222,.13)'; g.lineWidth = 1;
-      for (let i = -6; i <= 6; i++) {
-        g.beginPath(); g.moveTo(vx + i * w * 0.055, hz); g.lineTo(vx + i * w * 0.42, h); g.stroke();
-      }
-      for (let i = 1; i < 9; i++) {
-        const y = hz + (h - hz) * Math.pow(i / 9, 2.1);
-        g.globalAlpha = 1 - i / 11;
-        g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
-      }
-      g.globalAlpha = 1;
-      // wall / floor junction reads the depth instantly on camera
-      g.strokeStyle = 'rgba(210,245,232,.30)'; g.lineWidth = 1.4;
-      g.beginPath(); g.moveTo(0, hz); g.lineTo(w, hz); g.stroke();
-      // ceiling falls off
-      const cg = g.createLinearGradient(0, 0, 0, hz);
-      cg.addColorStop(0, 'rgba(0,0,0,.42)'); cg.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = cg; g.fillRect(0, 0, w, hz);
+    // light pool
+    const lp = g.createRadialGradient(w * S.lamp[0], h * S.lamp[1], 2, w * S.lamp[0], h * S.lamp[1], h * 0.95);
+    lp.addColorStop(0, 'rgba(220,250,240,.30)');
+    lp.addColorStop(.45, 'rgba(195,232,220,.09)');
+    lp.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = lp; g.fillRect(0, 0, w, h);
 
-      // light pool
-      const lp = g.createRadialGradient(w * S.lamp[0], h * S.lamp[1], 2, w * S.lamp[0], h * S.lamp[1], h * 0.95);
-      lp.addColorStop(0, 'rgba(220,250,240,.30)');
-      lp.addColorStop(.45, 'rgba(195,232,220,.09)');
-      lp.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = lp; g.fillRect(0, 0, w, h);
-
-      // props as silhouettes with a rim
-      S.props.forEach((p, i) => {
-        const x = p[0] * w, y = p[1] * h, pw = p[2] * w, ph = p[3] * h, kind = p[4];
-        g.fillStyle = 'rgba(4,9,11,.80)';
-        g.strokeStyle = 'rgba(205,240,228,.30)';
-        g.lineWidth = 1;
-        if (kind === 'tree') {
-          g.beginPath(); g.ellipse(x + pw / 2, y + ph / 2, pw / 2, ph / 2, 0, 0, 7); g.fill(); g.stroke();
-        } else if (kind === 'stairs') {
-          for (let s = 0; s < 8; s++) {
-            const sy = y + ph * s / 8, sh = ph / 8;
-            const inset = pw * 0.045 * s;
-            g.fillStyle = 'rgba(6,12,14,' + (0.30 + s * 0.055) + ')';
-            g.fillRect(x + inset, sy, pw - inset * 2, sh);
-            g.strokeStyle = 'rgba(200,235,225,.11)';
-            g.beginPath(); g.moveTo(x + inset, sy); g.lineTo(x + pw - inset, sy); g.stroke();
-          }
-        } else if (kind === 'frame') {
-          g.fillStyle = 'rgba(12,22,24,.88)'; g.fillRect(x, y, pw, ph);
-          g.strokeStyle = 'rgba(215,245,235,.46)'; g.lineWidth = 1.6; g.strokeRect(x, y, pw, ph);
-          // canvas inside the frame catches the picture light
-          const fg2 = g.createLinearGradient(x, y, x + pw, y + ph);
-          fg2.addColorStop(0, 'rgba(190,225,215,.13)'); fg2.addColorStop(1, 'rgba(190,225,215,.03)');
-          g.fillStyle = fg2; g.fillRect(x + 5, y + 5, pw - 10, ph - 10);
-          g.strokeStyle = 'rgba(215,245,235,.16)'; g.lineWidth = 1; g.strokeRect(x + 5, y + 5, pw - 10, ph - 10);
-        } else if (kind === 'vaultdoor') {
-          g.fillStyle = 'rgba(10,19,21,.92)'; g.fillRect(x, y, pw, ph);
-          g.strokeStyle = 'rgba(215,245,235,.44)'; g.lineWidth = 1.6; g.strokeRect(x, y, pw, ph);
-          const ccx = x + pw * .5, ccy = y + ph * .5, rr = Math.min(pw, ph) * .26;
-          g.lineWidth = 1.2; g.strokeStyle = 'rgba(215,245,235,.32)';
-          g.beginPath(); g.arc(ccx, ccy, rr, 0, 7); g.stroke();
-          g.beginPath(); g.arc(ccx, ccy, rr * .40, 0, 7); g.stroke();
-          for (let k = 0; k < 6; k++) {                        // handwheel spokes
-            const an = k * Math.PI / 3 + t * 0.05;
-            g.beginPath(); g.moveTo(ccx + Math.cos(an) * rr * .4, ccy + Math.sin(an) * rr * .4);
-            g.lineTo(ccx + Math.cos(an) * rr, ccy + Math.sin(an) * rr); g.stroke();
-          }
-          g.strokeStyle = 'rgba(215,245,235,.14)';
-          g.beginPath(); g.moveTo(x + pw * .5, y); g.lineTo(x + pw * .5, y + ph); g.stroke();
-        } else if (kind === 'rack') {                        // wine bottles catch the IR
-          g.fillStyle = 'rgba(4,9,11,.86)'; g.fillRect(x, y, pw, ph);
-          g.strokeStyle = 'rgba(205,240,228,.30)'; g.strokeRect(x, y, pw, ph);
-          g.strokeStyle = 'rgba(205,240,228,.15)';
-          for (let c = 1; c < 5; c++) { g.beginPath(); g.moveTo(x + pw * c / 5, y); g.lineTo(x + pw * c / 5, y + ph); g.stroke(); }
-          for (let rr2 = 1; rr2 < 7; rr2++) { g.beginPath(); g.moveTo(x, y + ph * rr2 / 7); g.lineTo(x + pw, y + ph * rr2 / 7); g.stroke(); }
-        } else if (kind === 'grass' || kind === 'road' || kind === 'floor' || kind === 'rug') {
-          g.fillStyle = 'rgba(4,9,10,.30)'; g.fillRect(x, y, pw, ph);
-          g.strokeStyle = 'rgba(205,240,228,.16)'; g.lineWidth = 1;
-          g.beginPath(); g.moveTo(x, y); g.lineTo(x + pw, y); g.stroke();
-        } else {
-          g.fillRect(x, y, pw, ph);
-          g.strokeRect(x, y, pw, ph);
+    // props as silhouettes with a rim
+    S.props.forEach((p, i) => {
+      const x = p[0] * w, y = p[1] * h, pw = p[2] * w, ph = p[3] * h, kind = p[4];
+      g.fillStyle = 'rgba(4,9,11,.80)';
+      g.strokeStyle = 'rgba(205,240,228,.30)';
+      g.lineWidth = 1;
+      if (kind === 'tree') {
+        g.beginPath(); g.ellipse(x + pw / 2, y + ph / 2, pw / 2, ph / 2, 0, 0, 7); g.fill(); g.stroke();
+      } else if (kind === 'stairs') {
+        for (let s = 0; s < 8; s++) {
+          const sy = y + ph * s / 8, sh = ph / 8;
+          const inset = pw * 0.045 * s;
+          g.fillStyle = 'rgba(6,12,14,' + (0.30 + s * 0.055) + ')';
+          g.fillRect(x + inset, sy, pw - inset * 2, sh);
+          g.strokeStyle = 'rgba(200,235,225,.11)';
+          g.beginPath(); g.moveTo(x + inset, sy); g.lineTo(x + pw - inset, sy); g.stroke();
         }
-      });
+      } else if (kind === 'frame') {
+        g.fillStyle = 'rgba(12,22,24,.88)'; g.fillRect(x, y, pw, ph);
+        g.strokeStyle = 'rgba(215,245,235,.46)'; g.lineWidth = 1.6; g.strokeRect(x, y, pw, ph);
+        // canvas inside the frame catches the picture light
+        const fg2 = g.createLinearGradient(x, y, x + pw, y + ph);
+        fg2.addColorStop(0, 'rgba(190,225,215,.13)'); fg2.addColorStop(1, 'rgba(190,225,215,.03)');
+        g.fillStyle = fg2; g.fillRect(x + 5, y + 5, pw - 10, ph - 10);
+        g.strokeStyle = 'rgba(215,245,235,.16)'; g.lineWidth = 1; g.strokeRect(x + 5, y + 5, pw - 10, ph - 10);
+      } else if (kind === 'vaultdoor') {
+        g.fillStyle = 'rgba(10,19,21,.92)'; g.fillRect(x, y, pw, ph);
+        g.strokeStyle = 'rgba(215,245,235,.44)'; g.lineWidth = 1.6; g.strokeRect(x, y, pw, ph);
+        const ccx = x + pw * .5, ccy = y + ph * .5, rr = Math.min(pw, ph) * .26;
+        g.lineWidth = 1.2; g.strokeStyle = 'rgba(215,245,235,.32)';
+        g.beginPath(); g.arc(ccx, ccy, rr, 0, 7); g.stroke();
+        g.beginPath(); g.arc(ccx, ccy, rr * .40, 0, 7); g.stroke();
+        for (let k = 0; k < 6; k++) {                        // handwheel spokes
+          const an = k * Math.PI / 3 + t * 0.05;
+          g.beginPath(); g.moveTo(ccx + Math.cos(an) * rr * .4, ccy + Math.sin(an) * rr * .4);
+          g.lineTo(ccx + Math.cos(an) * rr, ccy + Math.sin(an) * rr); g.stroke();
+        }
+        g.strokeStyle = 'rgba(215,245,235,.14)';
+        g.beginPath(); g.moveTo(x + pw * .5, y); g.lineTo(x + pw * .5, y + ph); g.stroke();
+      } else if (kind === 'rack') {                        // wine bottles catch the IR
+        g.fillStyle = 'rgba(4,9,11,.86)'; g.fillRect(x, y, pw, ph);
+        g.strokeStyle = 'rgba(205,240,228,.30)'; g.strokeRect(x, y, pw, ph);
+        g.strokeStyle = 'rgba(205,240,228,.15)';
+        for (let c = 1; c < 5; c++) { g.beginPath(); g.moveTo(x + pw * c / 5, y); g.lineTo(x + pw * c / 5, y + ph); g.stroke(); }
+        for (let rr2 = 1; rr2 < 7; rr2++) { g.beginPath(); g.moveTo(x, y + ph * rr2 / 7); g.lineTo(x + pw, y + ph * rr2 / 7); g.stroke(); }
+      } else if (kind === 'grass' || kind === 'road' || kind === 'floor' || kind === 'rug') {
+        g.fillStyle = 'rgba(4,9,10,.30)'; g.fillRect(x, y, pw, ph);
+        g.strokeStyle = 'rgba(205,240,228,.16)'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + pw, y); g.stroke();
+      } else {
+        g.fillRect(x, y, pw, ph);
+        g.strokeRect(x, y, pw, ph);
+      }
+    });
 
-      // patrolling figure
-      const wt = (t * walkSpeed + walkPhase) % 3;
-      if (wt < 1) {
-        const f = VAN.easeInOut(wt);
-        const fx = VAN.lerp(S.walk[0][0], S.walk[1][0], f) * w;
-        const fy = VAN.lerp(S.walk[0][1], S.walk[1][1], f) * h;
-        const scale = (fy / h) * 0.9 + 0.25;
-        const fh = h * 0.34 * scale;
-        g.fillStyle = 'rgba(2,5,6,.88)';
-        g.beginPath();
-        g.ellipse(fx, fy - fh * 0.90, fh * 0.115, fh * 0.13, 0, 0, 7); g.fill();      // head
-        g.beginPath();
-        g.moveTo(fx - fh * 0.15, fy);
-        g.lineTo(fx - fh * 0.14, fy - fh * 0.72);
-        g.lineTo(fx + fh * 0.14, fy - fh * 0.72);
-        g.lineTo(fx + fh * 0.15, fy);
-        g.closePath(); g.fill();
-        // legs swing
-        const sw = Math.sin(t * 7 + walkPhase) * fh * 0.10;
-        g.lineWidth = fh * 0.07; g.strokeStyle = 'rgba(2,5,6,.88)';
-        g.beginPath(); g.moveTo(fx, fy - fh * 0.05); g.lineTo(fx + sw, fy + fh * 0.16); g.stroke();
-        g.beginPath(); g.moveTo(fx, fy - fh * 0.05); g.lineTo(fx - sw, fy + fh * 0.16); g.stroke();
+    // patrolling figure
+    const wt = (t * 0.06 + VAN.hashStr(sceneName) % 7) % 3;
+    if (wt < 1) {
+      const f = VAN.easeInOut(wt);
+      const fx = VAN.lerp(S.walk[0][0], S.walk[1][0], f) * w;
+      const fy = VAN.lerp(S.walk[0][1], S.walk[1][1], f) * h;
+      const scale = (fy / h) * 0.9 + 0.25;
+      const fh = h * 0.34 * scale;
+      g.fillStyle = 'rgba(2,5,6,.88)';
+      g.beginPath();
+      g.ellipse(fx, fy - fh * 0.90, fh * 0.115, fh * 0.13, 0, 0, 7); g.fill();      // head
+      g.beginPath();
+      g.moveTo(fx - fh * 0.15, fy);
+      g.lineTo(fx - fh * 0.14, fy - fh * 0.72);
+      g.lineTo(fx + fh * 0.14, fy - fh * 0.72);
+      g.lineTo(fx + fh * 0.15, fy);
+      g.closePath(); g.fill();
+      // legs swing
+      const sw = Math.sin(t * 7) * fh * 0.10;
+      g.lineWidth = fh * 0.07; g.strokeStyle = 'rgba(2,5,6,.88)';
+      g.beginPath(); g.moveTo(fx, fy - fh * 0.05); g.lineTo(fx + sw, fy + fh * 0.16); g.stroke();
+      g.beginPath(); g.moveTo(fx, fy - fh * 0.05); g.lineTo(fx - sw, fy + fh * 0.16); g.stroke();
+    }
+  }
+
+
+
+  /* ===================== channels ===================== */
+  // A channel is a camera slot. It plays a video when one is loaded, and falls back
+  // to the drawn scene so the screen is never blank.
+  const chans = CAMERAS.map(c => Object.assign({}, c, { video: null, file: null, mode: 'LIVE' }));
+  let sel = 0, fx = 2, paused = false;
+
+  /* ===================== footage loading ===================== */
+  const VIDEO_RE = /\.(mp4|m4v|webm|mov|mkv|avi|mpg|mpeg)$/i;
+  const natural = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+
+  function attach(idx, url, label) {
+    const v = document.createElement('video');
+    v.src = url; v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'auto';
+    v.addEventListener('error', () => {
+      chans[idx].video = null;
+      chans[idx].mode = 'NOSIG';
+      chans[idx].badSource = label;
+      paintRail();
+    });
+    v.addEventListener('loadedmetadata', () => {
+      chans[idx].mode = 'LIVE';
+      paintRail();
+      if (idx === sel) VAN.$('#ro-res').textContent = v.videoWidth + '\u00d7' + v.videoHeight;
+    });
+    chans[idx].video = v;
+    chans[idx].file = label;
+    if (idx === sel) play();
+  }
+
+  function loadFiles(files) {
+    const vids = Array.from(files).filter(f => VIDEO_RE.test(f.name)).sort(natural);
+    if (!vids.length) { flashHint('No video files in that folder.'); return; }
+    // more clips than camera slots? extend the wall rather than dropping any
+    while (chans.length < vids.length) {
+      const n = chans.length + 1;
+      chans.push({ id: 'CAM-' + VAN.pad(n, 2), name: 'CHANNEL ' + n, scene: 'corridor',
+                   floor: 'EXT', ip: '.' + (10 + n), video: null, file: null, mode: 'LIVE' });
+    }
+    vids.forEach((f, i) => attach(i, URL.createObjectURL(f), f.name));
+    VAN.$('#dropzone').classList.remove('on');
+    paintRail(); show(0, true);
+  }
+
+  function clearFootage() {
+    chans.forEach(c => {
+      if (c.video) { try { URL.revokeObjectURL(c.video.src); } catch (e) {} }
+      c.video = null; c.file = null; c.badSource = null; c.mode = 'LIVE';
+    });
+    chans.length = CAMERAS.length;
+    paintRail(); show(Math.min(sel, chans.length - 1), true);
+    VAN.$('#dropzone').classList.add('on');
+  }
+
+  /* auto-load: media/cameras.json wins, otherwise probe media/cam1..12.mp4 */
+  async function autoLoad() {
+    let names = null;
+    try {
+      const r = await fetch('../media/cameras.json', { cache: 'no-store' });
+      if (r.ok) {
+        const j = await r.json();
+        names = (Array.isArray(j) ? j : j.clips || []).map(x => typeof x === 'string' ? { file: x } : x);
+      }
+    } catch (e) { /* no manifest — fine */ }
+
+    if (!names) {
+      const probes = [];
+      for (let i = 1; i <= 12; i++)
+        for (const ext of ['mp4', 'webm', 'mov', 'm4v']) probes.push({ file: 'cam' + i + '.' + ext });
+      const ok = [];
+      await Promise.all(probes.map(p => new Promise(res => {
+        const v = document.createElement('video');
+        v.preload = 'metadata';
+        v.onloadedmetadata = () => { ok.push(p); res(); };
+        v.onerror = () => res();
+        v.src = '../media/' + p.file;
+        setTimeout(res, 2500);
+      })));
+      // one clip per slot: first extension that actually loaded wins
+      const bySlot = new Map();
+      ok.forEach(p => { const k = p.file.replace(/\.[^.]+$/, ''); if (!bySlot.has(k)) bySlot.set(k, p); });
+      names = [...bySlot.values()].sort((a, b) => a.file.localeCompare(b.file, undefined, { numeric: true }));
+    }
+    if (!names || !names.length) { VAN.$('#dropzone').classList.add('on'); return; }
+
+    while (chans.length < names.length) {
+      const n = chans.length + 1;
+      chans.push({ id: 'CAM-' + VAN.pad(n, 2), name: 'CHANNEL ' + n, scene: 'corridor',
+                   floor: 'EXT', ip: '.' + (10 + n), video: null, file: null, mode: 'LIVE' });
+    }
+    names.forEach((n, i) => {
+      if (n.name) chans[i].name = n.name;
+      attach(i, '../media/' + n.file, n.file);
+    });
+    VAN.$('#dropzone').classList.remove('on');
+    paintRail(); show(0, true);
+  }
+
+  /* ===================== zoom + pan ===================== */
+  const feed = VAN.$('#feed'), cv = VAN.$('#cv');
+  const fit = VAN.fit(cv);
+  let zoom = 1, ox = 0, oy = 0, dragging = false, lastX = 0, lastY = 0;
+  const MAXZ = 6;
+
+  function clampPan() {
+    const w = fit.w, h = fit.h;
+    const maxX = Math.max(0, (zoom - 1) * w), maxY = Math.max(0, (zoom - 1) * h);
+    ox = VAN.clamp(ox, -maxX, 0);
+    oy = VAN.clamp(oy, -maxY, 0);
+  }
+  function setZoom(z, cx, cy) {
+    const w = fit.w, h = fit.h;
+    if (cx == null) { cx = w / 2; cy = h / 2; }
+    const nz = VAN.clamp(z, 1, MAXZ);
+    // keep whatever is under the pointer pinned in place
+    const fxp = (cx - ox) / zoom, fyp = (cy - oy) / zoom;
+    zoom = nz;
+    ox = cx - fxp * zoom;
+    oy = cy - fyp * zoom;
+    clampPan();
+    paintZoom();
+  }
+  function paintZoom() {
+    const t = zoom.toFixed(2) + 'x';
+    VAN.$('#hdr-zoom').textContent = t;
+    VAN.$('#s-zoom').textContent = t;
+    VAN.$('#o-zoom').textContent = zoom > 1.005 ? 'DIGITAL ZOOM ' + t : '';
+    VAN.$('#zoombox').classList.toggle('on', zoom > 1.005);
+  }
+
+  let hintTimer = setTimeout(hideHint, 7000);
+  function hideHint() { VAN.$('#hintbar').classList.add('gone'); }
+  feed.addEventListener('wheel', e => {
+    e.preventDefault();
+    clearTimeout(hintTimer); hideHint();
+    const horizontal = e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY);
+    if (horizontal) {
+      const now = performance.now();
+      if (now - hLast < 320) { hAccum = 0; return; }   // ride out trackpad momentum
+      hAccum += (e.shiftKey ? e.deltaY : e.deltaX);
+      if (Math.abs(hAccum) > 90) { step(hAccum > 0 ? 1 : -1); hAccum = 0; hLast = now; }
+      return;
+    }
+    const r = cv.getBoundingClientRect();
+    setZoom(zoom * (1 - e.deltaY * 0.0016), e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  let hAccum = 0, hLast = 0;
+
+  feed.addEventListener('mousedown', e => {
+    if (zoom <= 1.005) return;
+    dragging = true; lastX = e.clientX; lastY = e.clientY;
+    feed.classList.add('panning');
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    ox += e.clientX - lastX; oy += e.clientY - lastY;
+    lastX = e.clientX; lastY = e.clientY;
+    clampPan();
+  });
+  window.addEventListener('mouseup', () => { dragging = false; feed.classList.remove('panning'); });
+  feed.addEventListener('dblclick', () => setZoom(1));
+
+  /* ===================== channel switching ===================== */
+  let slide = 0, slideDir = 0;
+  const prevCv = document.createElement('canvas');
+
+  function step(d) { show((sel + d + chans.length) % chans.length, false, d); }
+
+  function show(i, instant, dir) {
+    const from = sel;
+    sel = ((i % chans.length) + chans.length) % chans.length;
+    if (!instant && from !== sel) {
+      // snapshot the outgoing frame so the two can slide past each other
+      prevCv.width = cv.width; prevCv.height = cv.height;
+      prevCv.getContext('2d').drawImage(cv, 0, 0);
+      slide = 1; slideDir = dir || 1;
+      VAN.$('#wipe').classList.remove('go');
+      void VAN.$('#wipe').offsetWidth;
+      VAN.$('#wipe').classList.add('go');
+    }
+    zoom = 1; ox = 0; oy = 0; paintZoom();
+    chans.forEach((c, n) => { if (c.video && n !== sel) c.video.pause(); });
+    play();
+    paintRail();
+  }
+
+  function play() {
+    const c = chans[sel];
+    if (c.video && !paused) { const p = c.video.play(); if (p && p.catch) p.catch(() => {}); }
+    const w = VAN.$('#feed');
+    w.dataset.mode = c.mode === 'LOOP' ? 'LOOP' : 'LIVE';
+    VAN.$('#hdr-ch').textContent = c.id;
+    VAN.$('#s-sel').textContent = c.id;
+    VAN.$('#o-id').textContent = c.id;
+    VAN.$('#o-name').textContent = c.name;
+    VAN.$('#o-meta').textContent = FICTION.cameraNet + c.ip + ' · ' + c.floor + ' · ' + (c.file ? '' : '2.8MM');
+    VAN.$('#hdr-src').textContent = c.file || (c.badSource ? 'unplayable: ' + c.badSource : 'drawn plate (no clip)');
+    VAN.$('#chpos').textContent = sel + 1;
+    VAN.$('#chtot').textContent = chans.length;
+    VAN.$('#ro-play').textContent = c.file ? (paused ? 'PAUSED' : 'PLAYING') : 'PLATE';
+    VAN.$('#ro-res').textContent = c.video && c.video.videoWidth ? c.video.videoWidth + '×' + c.video.videoHeight : '—';
+  }
+
+  function paintRail() {
+    VAN.$('#chans').innerHTML = chans.map((c, i) =>
+      '<div class="chan' + (i === sel ? ' sel' : '') + '" data-i="' + i + '">' +
+      '<span class="k">' + (KEYS[i] ? KEYS[i].toUpperCase() : (i + 1)) + '</span>' +
+      '<span class="nm">' + c.id + '<span class="src">' + (c.file || 'drawn plate') + '</span></span>' +
+      '<span class="st ' + c.mode + '">' + c.mode + '</span></div>').join('');
+    VAN.$$('#chans .chan').forEach(r => r.addEventListener('click', () => show(+r.dataset.i)));
+    const loaded = chans.filter(c => c.video).length;
+    VAN.$('#ro-clips').textContent = loaded;
+    VAN.$('#rail-count').textContent = chans.length + 'CH';
+    VAN.$('#s-loop').textContent = chans.filter(c => c.mode === 'LOOP').length;
+  }
+
+  /* ===================== loop injection ===================== */
+  const frozen = document.createElement('canvas');
+  function setMode(i, mode) {
+    const c = chans[i];
+    if (c.mode === 'NOSIG') return;
+    if (mode === 'LOOP') {
+      frozen.width = cv.width; frozen.height = cv.height;
+      frozen.getContext('2d').drawImage(cv, 0, 0);
+      c.plate = frozen.toDataURL ? null : null;
+      c.frozenAt = performance.now() / 1000;
+      if (c.video) c.video.pause();
+      // stash a per-channel still so other channels keep their own
+      const s = document.createElement('canvas');
+      s.width = cv.width; s.height = cv.height;
+      s.getContext('2d').drawImage(cv, 0, 0);
+      c.still = s;
+    } else {
+      c.still = null;
+      if (c.video && i === sel && !paused) { const p = c.video.play(); if (p && p.catch) p.catch(() => {}); }
+    }
+    c.mode = mode;
+    VAN.cue('cam', { id: c.id, status: mode });
+    if (i === sel) VAN.$('#feed').dataset.mode = mode;
+    paintRail();
+  }
+  VAN.on('cam', d => {
+    const c = chans.find(x => x.id === d.id);
+    if (c && c.mode !== d.status && c.mode !== 'NOSIG') {
+      const i = chans.indexOf(c);
+      if (d.status === 'LOOP' && i !== sel) { c.mode = 'LOOP'; if (c.video) c.video.pause(); }
+      else if (d.status === 'LIVE') { c.mode = 'LIVE'; c.still = null; if (c.video && i === sel && !paused) c.video.play().catch(() => {}); }
+      else if (i === sel) setMode(i, d.status);
+      paintRail();
+    }
+  });
+
+  /* ===================== the render ===================== */
+  function drawSource(g, w, h, t, c) {
+    g.save();
+    g.translate(ox, oy);
+    g.scale(zoom, zoom);
+    if (c.mode === 'LOOP' && c.still) {
+      g.drawImage(c.still, 0, 0, w, h);
+    } else if (c.video && c.video.readyState >= 2) {
+      // cover-fit the clip so any aspect ratio fills the frame
+      const vw = c.video.videoWidth, vh = c.video.videoHeight;
+      const s = Math.max(w / vw, h / vh);
+      const dw = vw * s, dh = vh * s;
+      g.drawImage(c.video, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    } else {
+      paintScene(g, w, h, t, c.scene);
+    }
+    g.restore();
+  }
+
+  let holdUntil = 0, glitchUntil = 0, lastMode = 'LIVE';
+  const held = document.createElement('canvas');
+
+  VAN.loop((dt, t) => {
+    const w = fit.w, h = fit.h, g = fit.ctx;
+    if (!w || !h) return;
+    const c = chans[sel];
+    if (c.mode !== lastMode) { glitchUntil = t + 0.4; lastMode = c.mode; }
+
+    const A = [0, 0.45, 1, 1.7][fx];        // effect amount
+
+    g.save();
+    g.clearRect(0, 0, w, h);
+
+    /* --- dropped frame: hold the last one instead of pulling a new one --- */
+    const holding = fx && t < holdUntil;
+    if (holding && held.width) {
+      g.drawImage(held, 0, 0, w, h);
+    } else {
+      g.filter = fx ? 'contrast(' + (1 + .12 * A) + ') saturate(' + (1 - .42 * A) + ') brightness(' + (1 - .05 * A) + ')' : 'none';
+      drawSource(g, w, h, t, c);
+      g.filter = 'none';
+      if (fx) {
+        held.width = cv.width; held.height = cv.height;
+        held.getContext('2d').drawImage(cv, 0, 0);
+        if (Math.random() < 0.010 * A) holdUntil = t + 0.05 + Math.random() * 0.16;
       }
     }
 
-    function draw(t) {
-      const w = fit.w, h = fit.h, g = fit.ctx;
-      if (!w || !h) return;
-      const mode = VAN.state.cams[cam.id] || 'LIVE';
-      if (mode !== lastMode) { glitchUntil = t + 0.42; if (mode === 'LOOP') frozenAt = t; lastMode = mode; }
-
+    /* --- channel-change slide --- */
+    if (slide > 0) {
+      slide = Math.max(0, slide - dt * 5.5);
+      const k = VAN.easeOut(1 - slide);
+      const off = slideDir * w;
       g.save();
-      // IP cameras never sit perfectly still
-      const jx = Math.sin(t * 0.7 + shakeSeed) * 0.9, jy = Math.cos(t * 0.53 + shakeSeed) * 0.7;
-      g.translate(jx, jy);
-
-      // a looped feed replays a 6 s window forever
-      const st = mode === 'LOOP' ? frozenAt - 6 + ((t - frozenAt) % 6) : t;
-      if (mode === 'DOWN') { g.fillStyle = '#05080a'; g.fillRect(-4, -4, w + 8, h + 8); }
-      else paintScene(g, w, h, st);
+      g.globalAlpha = 1;
+      g.drawImage(prevCv, 0, 0, cv.width, cv.height, -k * off, 0, w, h);
       g.restore();
+      g.save();
+      g.globalCompositeOperation = 'source-over';
+      g.restore();
+    }
 
-      // sensor noise
-      g.globalAlpha = mode === 'DOWN' ? 0.55 : (S.ir ? 0.13 : 0.085);
+    if (fx) {
+      /* --- chroma split, stronger during a glitch --- */
+      const cs = (t < glitchUntil ? 5 : 1.1) * A;
+      if (cs > 0.4) {
+        g.globalCompositeOperation = 'lighter';
+        g.globalAlpha = 0.10 * A;
+        g.filter = 'hue-rotate(-40deg)';
+        drawSourceOffset(g, w, h, t, c, -cs, 0);
+        g.filter = 'hue-rotate(40deg)';
+        drawSourceOffset(g, w, h, t, c, cs, 0);
+        g.filter = 'none';
+        g.globalAlpha = 1;
+        g.globalCompositeOperation = 'source-over';
+      }
+
+      /* --- block tearing --- */
+      if (t < glitchUntil || Math.random() < 0.004 * A) {
+        const n = 2 + (Math.random() * 4 * A | 0);
+        for (let i = 0; i < n; i++) {
+          const bh = 5 + Math.random() * 34, by = Math.random() * h, dx = (Math.random() - .5) * 70 * A;
+          g.drawImage(cv, 0, by * (cv.height / h), cv.width, bh * (cv.height / h), dx, by, w, bh);
+        }
+        g.fillStyle = 'rgba(200,255,235,.05)';
+        g.fillRect(0, Math.random() * h, w, 2 + Math.random() * 10);
+      }
+
+      /* --- sensor grain --- */
+      g.globalAlpha = 0.075 * A;
       g.globalCompositeOperation = 'lighter';
       g.drawImage(NOISE[(t * 24 | 0) % NOISE.length], 0, 0, w, h);
       g.globalCompositeOperation = 'source-over';
       g.globalAlpha = 1;
 
-      // IR tint
-      if (S.ir && mode !== 'DOWN') {
-        const ir = g.createRadialGradient(w / 2, h * .55, 2, w / 2, h * .55, w * .70);
-        ir.addColorStop(0, 'rgba(150,225,205,.11)');
-        ir.addColorStop(1, 'rgba(120,190,170,0)');
-        g.fillStyle = ir; g.fillRect(0, 0, w, h);
-      }
-
-      // block-compression glitch
-      if (t < glitchUntil || R() < 0.0022) {
-        const n = 2 + (R() * 4 | 0);
-        for (let i = 0; i < n; i++) {
-          const bh = 4 + R() * 26, by = R() * h, dx = (R() - 0.5) * 44;
-          g.drawImage(canvas, 0, by * (canvas.height / h), canvas.width, bh * (canvas.height / h),
-                      dx, by, w, bh);
-        }
-        g.fillStyle = 'rgba(120,255,200,.05)'; g.fillRect(0, R() * h, w, 2 + R() * 8);
-      }
-
-      // scanlines + vignette
-      g.fillStyle = 'rgba(0,0,0,.20)';
+      /* --- scanlines + rolling bar --- */
+      g.fillStyle = 'rgba(0,0,0,' + (0.16 * A) + ')';
       for (let y = 0; y < h; y += 3) g.fillRect(0, y, w, 1);
-      const vg = g.createRadialGradient(w / 2, h / 2, h * 0.25, w / 2, h / 2, h * 0.85);
-      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.46)');
+      const roll = ((t * 46) % (h + 200)) - 100;
+      const rg = g.createLinearGradient(0, roll - 60, 0, roll + 60);
+      rg.addColorStop(0, 'rgba(255,255,255,0)');
+      rg.addColorStop(.5, 'rgba(255,255,255,' + (0.022 * A) + ')');
+      rg.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = rg; g.fillRect(0, roll - 60, w, 120);
+
+      /* --- vignette --- */
+      const vg = g.createRadialGradient(w / 2, h / 2, h * 0.32, w / 2, h / 2, h * 0.92);
+      vg.addColorStop(0, 'rgba(0,0,0,0)');
+      vg.addColorStop(1, 'rgba(0,0,0,' + (0.42 * A) + ')');
       g.fillStyle = vg; g.fillRect(0, 0, w, h);
     }
-    return { draw };
-  }
 
-  /* ---------- build the wall ---------- */
-  const grid = VAN.$('#grid');
-  const feeds = [];
-  CAMERAS.forEach((cam, i) => {
-    const tile = VAN.el('div', 'tile');
-    tile.dataset.id = cam.id;
-    tile.dataset.mode = 'LIVE';
-    const cv = document.createElement('canvas');
-    tile.appendChild(cv);
-    tile.insertAdjacentHTML('beforeend',
-      '<div class="cross"></div>' +
-      '<div class="osd">' +
-        '<div class="tl">' + cam.id + '  ' + cam.name + '</div>' +
-        '<div class="tr"><span class="bars"><i class="on" style="height:3px"></i><i class="on" style="height:5px"></i><i class="on" style="height:7px"></i><i style="height:9px"></i></span>' +
-          '<span class="rec"><i></i>REC</span></div>' +
-        '<div class="bl">' + FICTION.cameraNet + cam.ip + ' · ' + cam.floor + ' · 2.8MM</div>' +
-        '<div class="br" data-ts>—</div>' +
-      '</div>' +
-      '<div class="badge-loop">● LOOP INJECTED</div>');
-    tile.addEventListener('click', () => {
-      if (sel === i) grid.classList.toggle('zoom');
-      else { select(i); grid.classList.remove('zoom'); }
-    });
-    grid.appendChild(tile);
-    feeds.push({ cam, tile, feed: makeFeed(cv, cam, i), ts: tile.querySelector('[data-ts]') });
+    g.restore();
+
+    const d = new Date();
+    VAN.$('#o-ts').textContent = VAN.stamp(d) + '.' + VAN.pad(d.getMilliseconds(), 3);
   });
 
-  let sel = 0;
-  function select(i) {
-    sel = ((i % feeds.length) + feeds.length) % feeds.length;
-    feeds.forEach((f, n) => f.tile.classList.toggle('sel', n === sel));
-    VAN.$('#s-sel').textContent = feeds[sel].cam.id;
-    renderChans();
+  function drawSourceOffset(g, w, h, t, c, dx, dy) {
+    g.save(); g.translate(dx, dy); drawSource(g, w, h, t, c); g.restore();
   }
 
-  /* ---------- channel rail ---------- */
-  function renderChans() {
-    VAN.$('#chans').innerHTML = feeds.map((f, i) => {
-      const m = VAN.state.cams[f.cam.id] || 'LIVE';
-      return '<div class="chan' + (i === sel ? ' sel' : '') + '" data-i="' + i + '">' +
-        '<span class="k">' + KEYS[i].toUpperCase() + '</span>' +
-        '<span>' + f.cam.id + ' <span class="dim">' + f.cam.name + '</span></span>' +
-        '<span class="st ' + m + '">' + m + '</span></div>';
-    }).join('');
-    VAN.$$('#chans .chan').forEach(c => c.addEventListener('click', () => select(+c.dataset.i)));
-    const looped = feeds.filter(f => VAN.state.cams[f.cam.id] === 'LOOP').length;
-    VAN.$('#s-loop').textContent = looped;
-    VAN.$('#nlive').textContent = feeds.length - looped;
-    feeds.forEach(f => f.tile.dataset.mode = VAN.state.cams[f.cam.id] || 'LIVE');
-  }
+  /* ===================== controls ===================== */
+  VAN.$('#b-load').addEventListener('click', () => VAN.$('#filepick').click());
+  VAN.$('#dz-btn').addEventListener('click', () => VAN.$('#filepick').click());
+  VAN.$('#pickfiles').addEventListener('click', e => { e.preventDefault(); VAN.$('#filepick2').click(); });
+  VAN.$('#filepick').addEventListener('change', e => loadFiles(e.target.files));
+  VAN.$('#filepick2').addEventListener('change', e => loadFiles(e.target.files));
+  VAN.$('#b-clear').addEventListener('click', clearFootage);
 
-  function setMode(i, mode) { VAN.cue('cam', { id: feeds[i].cam.id, status: mode }); }
-  VAN.on('cam', renderChans);
-
-  VAN.$('#b-loop').addEventListener('click', () => feeds.forEach((f, i) => setMode(i, 'LOOP')));
-  VAN.$('#b-live').addEventListener('click', () => feeds.forEach((f, i) => setMode(i, 'LIVE')));
-
-  const km = {};
-  KEYS.forEach((k, i) => km[k] = () => {
-    select(i);
-    setMode(i, (VAN.state.cams[feeds[i].cam.id] || 'LIVE') === 'LOOP' ? 'LIVE' : 'LOOP');
+  ['dragenter', 'dragover'].forEach(ev => feed.addEventListener(ev, e => {
+    e.preventDefault(); feed.classList.add('dragover');
+  }));
+  ['dragleave', 'drop'].forEach(ev => feed.addEventListener(ev, e => {
+    e.preventDefault(); feed.classList.remove('dragover');
+  }));
+  feed.addEventListener('drop', e => {
+    const items = e.dataTransfer.files;
+    if (items && items.length) loadFiles(items);
   });
-  km['l'] = () => feeds.forEach((f, i) => setMode(i, 'LOOP'));
-  km['k'] = () => feeds.forEach((f, i) => setMode(i, 'LIVE'));
-  km['Enter'] = () => grid.classList.toggle('zoom');
+
+  VAN.$$('.fxrow .btn').forEach(b => b.addEventListener('click', () => setFx(+b.dataset.fx)));
+  function setFx(n) {
+    fx = VAN.clamp(n, 0, 3);
+    VAN.$$('.fxrow .btn').forEach(b => b.classList.toggle('active', +b.dataset.fx === fx));
+  }
+
+  VAN.$('#b-loop').addEventListener('click', () => setMode(sel, 'LOOP'));
+  VAN.$('#b-live').addEventListener('click', () => chans.forEach((c, i) => c.mode === 'LOOP' && setMode(i, 'LIVE')));
+
+  function flashHint(msg) {
+    const h = VAN.$('#hintbar');
+    const old = h.innerHTML;
+    h.classList.remove('gone');
+    h.innerHTML = '<span class="bad">' + msg + '</span>';
+    setTimeout(() => { h.innerHTML = old; h.classList.add('gone'); }, 2800);
+  }
+
+  const km = {
+    ArrowRight: () => step(1),
+    ArrowLeft: () => step(-1),
+    '+': () => setZoom(zoom * 1.25), '=': () => setZoom(zoom * 1.25),
+    '-': () => setZoom(zoom / 1.25), '_': () => setZoom(zoom / 1.25),
+    '0': () => setZoom(1),
+    e: () => setFx((fx + 1) % 4),
+    p: () => {
+      paused = !paused;
+      const v = chans[sel].video;
+      if (v) { paused ? v.pause() : v.play().catch(() => {}); }
+      VAN.$('#ro-play').textContent = chans[sel].file ? (paused ? 'PAUSED' : 'PLAYING') : 'PLATE';
+    },
+    l: () => setMode(sel, 'LOOP'),
+    k: () => chans.forEach((c, i) => c.mode === 'LOOP' && setMode(i, 'LIVE'))
+  };
+  KEYS.forEach((k, i) => km[k] = () => show(i));
   VAN.keys(km);
 
-  /* phase drives the wall on its own so the operator never has to touch it */
+  /* phase still drives the wall on its own */
   VAN.on('phase', p => {
-    if (p >= 2) ['CAM-05', 'CAM-06', 'CAM-07'].forEach(id => VAN.local('cam', { id, status: 'LOOP' }));
-    if (p >= 3) ['CAM-08'].forEach(id => VAN.local('cam', { id, status: 'LOOP' }));
-    if (p <= 1) CAMERAS.forEach(c => VAN.local('cam', { id: c.id, status: 'LIVE' }));
-    renderChans();
+    if (p >= 2) ['CAM-05', 'CAM-06', 'CAM-07'].forEach(id => {
+      const i = chans.findIndex(c => c.id === id);
+      if (i >= 0 && chans[i].mode === 'LIVE') { chans[i].mode = 'LOOP'; if (chans[i].video) chans[i].video.pause(); }
+    });
+    if (p <= 1) chans.forEach((c, i) => { if (c.mode === 'LOOP') { c.mode = 'LIVE'; c.still = null; if (c.video && i === sel) c.video.play().catch(() => {}); } });
+    paintRail();
+    if (sel < chans.length) VAN.$('#feed').dataset.mode = chans[sel].mode === 'LOOP' ? 'LOOP' : 'LIVE';
   });
 
-  /* ---------- readouts ---------- */
-  const bufBars = [];
-  for (let i = 0; i < 34; i++) { const b = VAN.el('i'); VAN.$('#buf').appendChild(b); bufBars.push(b); }
-  setInterval(() => {
-    VAN.$('#ro-br').textContent = (3.4 + Math.random() * 1.4).toFixed(1) + ' Mb/s';
-    VAN.$('#ro-drift').textContent = '+' + (Math.random() * 40 | 0) + ' ms';
-    VAN.$('#ro-disk').textContent = (61 + Math.random() * 2).toFixed(1) + ' % / 8 TB';
-    VAN.$('#ro-temp').textContent = (38 + Math.random() * 3).toFixed(0) + ' °C';
-    bufBars.forEach(b => b.style.height = (18 + Math.random() * 82) + '%');
-  }, 900);
-
-  /* ---------- one shared frame loop for all nine feeds ---------- */
-  VAN.loop((dt, t) => {
-    for (let i = 0; i < feeds.length; i++) {
-      const f = feeds[i];
-      if (grid.classList.contains('zoom') && i !== sel) continue;
-      f.feed.draw(t);
-      const d = new Date();
-      f.ts.textContent = VAN.stamp(d) + '.' + VAN.pad(d.getMilliseconds(), 3);
-    }
-  });
-
-  select(0);
-  renderChans();
+  setFx(2);
+  paintRail();
+  show(0, true);
+  autoLoad();
 })();
 </script>
 </body>

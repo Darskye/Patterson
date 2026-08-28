@@ -57,7 +57,7 @@ dot moves up the drive — all on different monitors, all at once.
 | Screen | What it is | Screen keys |
 |---|---|---|
 | **Schematic** | Hallowell House in plan — three levels plus the basement vault. Rooms, door swings, patrol, camera cones, sensors, and the animated route in. Click any room to inspect it. | `Q` `W` `E` level · `R` route · `Z` bypass · `V` vault |
-| **Camera wall** | Nine security feeds, drawn live — grain, scanlines, timestamps, a guard walking through. Loop-inject any channel. | `Q`…`O` loop a channel · `L` all · `K` restore · `Enter` zoom |
+| **Cameras** | One feed at a time, full frame. Plays your own footage; scroll to zoom into it, scroll sideways for the next camera. Full CCTV grade over the top. | scroll · `←` `→` · `Q`…`O` jump · `E` look · `L`/`K` loop |
 | **Shell** | The hero. An eleven-stage intrusion into the freight company, ending on the decrypted bill of lading. | see below |
 | **Network map** | Lateral movement across the estate network; hosts flip to OWNED as the intrusion walks in. | `Space` advance · `\` drop |
 | **Key recovery** | Eight reels falling one at a time onto the vault code, with a thermal read of the keypad. | `Space` run · `\` reset |
@@ -65,6 +65,27 @@ dot moves up the drive — all on different monitors, all at once.
 | **Signal intercept** | Spectrum, waterfall, direction finder, and the guards' radio traffic typing itself out. | `↑` `↓` tune · `Space` hold |
 | **Ground trace** | The estate from above — the van, the girl walking in, the patrol, the truck booked for six. | `Tab` next unit |
 | **Data wall** | Pure background plate. Nothing to drive; point a camera at it. | — |
+
+### Your own camera footage
+
+Open the **Cameras** screen and either drag your clips onto the window or click
+**LOAD FOOTAGE** and point it at the folder. Every video in it becomes a channel, in
+filename order — nothing is renamed or copied. Drop them in `vanops/media/` instead and
+they load themselves every time.
+
+- **scroll** zooms into the footage, centred on the pointer, up to 6x
+- **scroll sideways** (or shift+scroll on a mouse) moves to the next camera
+- **drag** pans while zoomed, **double-click** snaps back
+- **`E`** cycles the look: off / light / full / heavy — grade, sensor grain, scanlines,
+  chroma split, dropped frames, block tearing, all drawn over your clip
+- channels with no clip fall back to the drawn plate, so the screen is never blank
+
+If a channel reads **NOSIG**, Chrome can't decode that file — usually ProRes or HEVC in a
+`.mov`. One line fixes it:
+
+```bash
+ffmpeg -i "yourclip.mov" -c:v libx264 -crf 18 -pix_fmt yuv420p -an "cam1.mp4"
+```
 
 ### Shooting the terminal
 
